@@ -1,56 +1,51 @@
 import streamlit as st
-import pandas as pd
-import time
 from streamlit_gsheets import GSheetsConnection
+import time
 
-# 1. Page Configuration for TV
-st.set_page_config(page_title="Race Leaderboard", layout="wide")
+# Set to wide mode for the big screen
+st.set_page_config(layout="wide")
 
-# Custom CSS to make text BIG for TV screens
-st.markdown("""
-    <style>
-    .big-font { font-size:50px !important; font-weight: bold; }
-    .medium-font { font-size:30px !important; }
-    thead tr th { font-size: 25px !important; }
-    tbody tr td { font-size: 25px !important; }
-    </style>
-    """, unsafe_allow_name_to_id=True)
-
-# 2. Connect to your Google Sheet
-# We use the GSheetsConnection which is very fast for reading
+# Connect using your private credentials
+# (Streamlit will look for your JSON data in secrets.toml)
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-def get_stats():
-    # Replace 'Statistics' with the exact name of your stats tab
-    df = conn.read(worksheet="Statistics", ttl="5s") 
-    return df
+# Function to pull the specific tab
+def get_leaderboard():
+    # ttl="5s" means it checks the Google Sheet for updates every 5 seconds
+    return conn.read(worksheet="Statistics", ttl="5s")
 
-# 3. Rotation Logic (Overall -> Female -> Male -> Youth)
-if 'rotation' not in st.session_state:
-    st.session_state.rotation = 0
+# --- ROTATION LOGIC ---
+if 'view_index' not in st.session_state:
+    st.session_state.view_index = 0
 
-categories = ["Overall 6-Hour", "Female 6-Hour", "Male 6-Hour", "Youth Event"]
-current_view = categories[st.session_state.rotation % len(categories)]
+views = ["Overall 6-Hour", "Female 6-Hour", "Male 6-Hour", "Youth Event"]
+current_view = views[st.session_state.view_index % len(views)]
 
-# Header
-st.markdown(f'<p class="big-font">🏆 {current_view}</p>', unsafe_allow_html=True)
+# Display Title
+st.markdown(f"# 🏆 {current_view}")
 
-# 4. Filter and Display
-df = get_stats()
+# Get Data
+data = get_leaderboard()
 
+# Filter based on your sheet columns
 if current_view == "Overall 6-Hour":
-    display_df = df[df['distance'] == '6HR'].sort_values(by='Laps', ascending=False).head(10)
+    df_display = data[data['distance'] == '6HR']
 elif current_view == "Female 6-Hour":
-    display_df = df[(df['distance'] == '6HR') & (df['gender'] == 'F')].sort_values(by='Laps', ascending=False).head(10)
+    df_display = data[(data['distance'] == '6HR') & (data['gender'] == 'F')]
 elif current_view == "Male 6-Hour":
-    display_df = df[(df['distance'] == '6HR') & (df['gender'] == 'M')].sort_values(by='Laps', ascending=False).head(10)
-else: # Youth
-    display_df = df[df['distance'].str.contains('Youth')].sort_values(by='Laps', ascending=False)
+    df_display = data[(data['distance'] == '6HR') & (data['gender'] == 'M')]
+else:
+    # Captures anything with "Youth" in the distance name
+    df_display = data[data['distance'].str.contains("Youth", na=False)]
 
-# Display the table
-st.table(display_df[['Bib', 'First Name', 'Last Name', 'Laps', 'Fastest Lap']])
+# Sort by Laps (Primary) and Fastest Lap (Secondary Tie-breaker)
+# Note: Ensure these column names match your sheet exactly
+df_sorted = df_display.sort_values(by=['Laps', 'Fastest Lap'], ascending=[False, True]).head(15)
 
-# 5. Auto-Refresh & Rotate (20 seconds per screen)
+# Show the table with specific columns
+st.table(df_sorted[['Bib', 'First Name', 'Last Name', 'Laps', 'Fastest Lap']])
+
+# Auto-refresh and rotate every 20 seconds
 time.sleep(20)
-st.session_state.rotation += 1
+st.session_state.view_index += 1
 st.rerun()
