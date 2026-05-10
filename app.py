@@ -14,9 +14,13 @@ def get_leaderboard_data():
     # Clean up column names in case there are hidden spaces
     df.columns = df.columns.str.strip()
     
-    # Convert Loop Count to numbers so we can sort properly
-    if 'Loop Count' in df.columns:
-        df['Loop Count'] = pd.to_numeric(df['Loop Count'], errors='coerce').fillna(0)
+    # --- CLEANING UP DECIMALS ---
+    # Convert numeric columns to 'Int64' which handles missing values but keeps numbers as integers
+    cols_to_fix = ['Bib', 'Loop Count', 'Mileage']
+    for col in cols_to_fix:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+            
     return df
 
 if 'view_index' not in st.session_state:
@@ -30,8 +34,7 @@ st.markdown(f"<h1 style='text-align: center; font-size: 60px;'>🏆 {current_vie
 try:
     data = get_leaderboard_data()
 
-    # Filtering logic - using the exact column names from your screenshot
-    # We check if the 'Event' column contains "6HR"
+    # Filtering logic
     filtered_df = data[data['Event'].str.contains("6HR", na=False, case=False)]
 
     if "FEMALE" in current_view:
@@ -42,13 +45,13 @@ try:
     # Sort by Loop Count (Highest first)
     leaderboard = filtered_df.sort_values(by='Loop Count', ascending=False).head(15)
 
-    # Display the table with your specific column names
+    # Display the table
     st.table(leaderboard[['Bib', 'Name', 'Loop Count', 'Mileage']])
 
 except Exception as e:
-    # This will show us if a column name is still slightly off
     st.error(f"Aligning data columns... (Current Issue: {e})")
-    st.write("Available columns found:", list(data.columns) if 'data' in locals() else "None")
+    if 'data' in locals():
+        st.write("Available columns found:", list(data.columns))
 
 time.sleep(15)
 st.session_state.view_index += 1
