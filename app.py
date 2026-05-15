@@ -4,42 +4,48 @@ import pandas as pd
 import time
 from datetime import datetime
 
-# 1. Page Configuration & Full-Screen Background CSS
+# 1. Page Configuration
 st.set_page_config(page_title="LIVE LEADERBOARD", layout="wide")
 
+# REPLACE THIS URL with a direct link to your true image file (e.g., uploaded to Imgur, postimages, or raw GitHub link)
+LOGO_URL = "https://imgur.com/a/nNmcwys.png" 
+
 st.markdown(
-    """
+    f"""
     <style>
-    /* Faint full-screen background logo */
-    .stApp {
-        background-image: linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92)), url("app/static/logo.jpg");
-        background-size: cover;
+    /* Full-screen faint background logo */
+    .stApp {{
+        background-image: linear-gradient(rgba(255, 255, 255, 0.93), rgba(255, 255, 255, 0.93)), url("{LOGO_URL}");
+        background-size: contain;
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
-    }
+    }}
     
-    /* Monitor-friendly clean table styling (No blue border fill) */
-    table {
+    /* Center-aligned, minimalist, border-free table design */
+    table {{
         width: 100% !important;
-        font-size: 24px !important;
+        font-size: 26px !important;
         background-color: transparent !important;
         border-collapse: collapse !important;
-    }
-    th {
+        margin-left: auto;
+        margin-right: auto;
+    }}
+    th {{
         background-color: transparent !important;
-        color: #111111 !important;
-        font-size: 26px !important;
+        color: #222222 !important;
+        font-size: 28px !important;
         font-weight: bold !important;
-        border-bottom: 3px solid #333333 !important;
-        text-align: left !important;
-        padding: 12px !important;
-    }
-    td {
-        padding: 14px 12px !important;
+        text-align: center !important;
+        padding: 16px !important;
+        border-bottom: 2px solid #444444 !important;
+    }}
+    td {{
+        padding: 16px !important;
         font-weight: 500 !important;
-        border-bottom: 1px solid #cccccc !important;
-    }
+        text-align: center !important;
+        border-bottom: 1px solid #e0e0e0 !important;
+    }}
     </style>
     """,
     unsafe_allow_html=True
@@ -109,7 +115,7 @@ def get_raw_data():
 data = get_raw_data()
 
 if not data.empty:
-    # Generate overall numeric positions (1, 2, 3...) instead of O1, O2...
+    # Generate overall numeric positions (1, 2, 3...)
     data['Position'] = [i+1 for i in range(len(data))]
     
     # Generate Class Places (M1, M2... / F1, F2...)
@@ -132,10 +138,12 @@ if 'row_chunk' not in st.session_state:
     st.session_state.row_chunk = 0
 
 current_view = views[st.session_state.view_index % len(views)]
-ROWS_PER_SCREEN = 12
+
+# Dropped rows per screen to 10 to give the table breathing room on a standard monitor
+ROWS_PER_SCREEN = 10 
 
 # 5. Render Layout
-st.markdown(f"<h1 style='text-align: center; font-size: 55px; margin-bottom: 20px;'>🏆 {current_view}</h1>", unsafe_allow_html=True)
+st.markdown(f"<h1 style='text-align: center; font-size: 55px; margin-bottom: 30px;'>🏆 {current_view}</h1>", unsafe_allow_html=True)
 
 if data.empty:
     st.info("Awaiting initial RFID reads...")
@@ -160,22 +168,21 @@ else:
         podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
         
         with col1:
-            st.markdown("### 🏃‍♂️ Top 5 Men")
+            st.markdown("<h3 style='text-align: center;'>🏃‍♂️ Top 5 Men</h3>", unsafe_allow_html=True)
             top_m = data[data['gender'].str.upper() == 'M'].head(5).copy()
             st.table(top_m[podium_cols].rename(columns={'Loop_Count': 'Loops'}))
             
         with col2:
-            st.markdown("### 🏃‍♀️ Top 5 Women")
+            st.markdown("<h3 style='text-align: center;'>🏃‍♀️ Top 5 Women</h3>", unsafe_allow_html=True)
             top_f = data[data['gender'].str.upper() == 'F'].head(5).copy()
             st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}))
             
-        st.markdown("---")
-        st.markdown("### 🧒 All Youth (Under 18)")
+        st.markdown("<br><hr><br>", unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align: center;'>🧒 All Youth (Under 18)</h3>", unsafe_allow_html=True)
         youth_df = data[data['Age'] < 18].copy()
-        # Showing full context for youth positioning
         st.table(youth_df[['Position', 'Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']].rename(columns={'Loop_Count': 'Loops'}))
 
-    # Chunking / Scrolling engine for long main pages
+    # Chunking / Scrolling engine for main pages
     if not display_df.empty:
         total_rows = len(display_df)
         start_row = st.session_state.row_chunk * ROWS_PER_SCREEN
@@ -190,7 +197,6 @@ else:
         else:
             st.session_state.row_chunk += 1
     else:
-        # Dashboard layout logic progression
         st.session_state.row_chunk = 0
         st.session_state.view_index += 1
 
