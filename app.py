@@ -19,20 +19,26 @@ st.markdown(
         background-attachment: fixed;
     }
     
-    /* Monitor-friendly table styling */
+    /* Monitor-friendly clean table styling (No blue border fill) */
     table {
         width: 100% !important;
         font-size: 24px !important;
+        background-color: transparent !important;
+        border-collapse: collapse !important;
     }
     th {
-        background-color: #1f77b4 !important;
-        color: white !important;
+        background-color: transparent !important;
+        color: #111111 !important;
         font-size: 26px !important;
         font-weight: bold !important;
+        border-bottom: 3px solid #333333 !important;
+        text-align: left !important;
+        padding: 12px !important;
     }
     td {
-        padding: 12px !important;
+        padding: 14px 12px !important;
         font-weight: 500 !important;
+        border-bottom: 1px solid #cccccc !important;
     }
     </style>
     """,
@@ -103,18 +109,18 @@ def get_raw_data():
 data = get_raw_data()
 
 if not data.empty:
-    # Generate overall positions (O1, O2...)
-    data['Overall_Pos'] = [f"O{i+1}" for i in range(len(data))]
+    # Generate overall numeric positions (1, 2, 3...) instead of O1, O2...
+    data['Position'] = [i+1 for i in range(len(data))]
     
-    # Generate Gender positions using your exact column name: 'gender'
-    data['Gender_Pos'] = ""
+    # Generate Class Places (M1, M2... / F1, F2...)
+    data['Class Place'] = ""
     m_count, f_count = 1, 1
     for idx, row in data.iterrows():
         if str(row['gender']).upper() == 'M':
-            data.at[idx, 'Gender_Pos'] = f"M{m_count}"
+            data.at[idx, 'Class Place'] = f"M{m_count}"
             m_count += 1
         elif str(row['gender']).upper() == 'F':
-            data.at[idx, 'Gender_Pos'] = f"F{f_count}"
+            data.at[idx, 'Class Place'] = f"F{f_count}"
             f_count += 1
 
 # 4. Cycle & Chunk State Setup
@@ -134,49 +140,49 @@ st.markdown(f"<h1 style='text-align: center; font-size: 55px; margin-bottom: 20p
 if data.empty:
     st.info("Awaiting initial RFID reads...")
 else:
+    cols_to_show = []
+    display_df = pd.DataFrame()
+    
     if current_view == "OVERALL 6-HOUR":
         display_df = data.copy()
-        display_df['Position'] = display_df['Overall_Pos']
+        cols_to_show = ['Position', 'Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
         
     elif current_view == "FEMALE 6-HOUR":
         display_df = data[data['gender'].str.upper() == 'F'].copy()
-        display_df['Position'] = display_df['Gender_Pos']
+        cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
         
     elif current_view == "MALE 6-HOUR":
         display_df = data[data['gender'].str.upper() == 'M'].copy()
-        display_df['Position'] = display_df['Gender_Pos']
+        cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
         
     elif current_view == "PODIUM & YOUTH":
         col1, col2 = st.columns(2)
+        podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
         
         with col1:
             st.markdown("### 🏃‍♂️ Top 5 Men")
             top_m = data[data['gender'].str.upper() == 'M'].head(5).copy()
-            top_m['Position'] = top_m['Gender_Pos']
-            st.table(top_m[['Position', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']].rename(columns={'Loop_Count': 'Loops'}))
+            st.table(top_m[podium_cols].rename(columns={'Loop_Count': 'Loops'}))
             
         with col2:
             st.markdown("### 🏃‍♀️ Top 5 Women")
             top_f = data[data['gender'].str.upper() == 'F'].head(5).copy()
-            top_f['Position'] = top_f['Gender_Pos']
-            st.table(top_f[['Position', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']].rename(columns={'Loop_Count': 'Loops'}))
+            st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}))
             
         st.markdown("---")
         st.markdown("### 🧒 All Youth (Under 18)")
         youth_df = data[data['Age'] < 18].copy()
-        youth_df['Position'] = youth_df['Overall_Pos']
-        st.table(youth_df[['Position', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']].rename(columns={'Loop_Count': 'Loops'}))
-        
-        display_df = pd.DataFrame() 
+        # Showing full context for youth positioning
+        st.table(youth_df[['Position', 'Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']].rename(columns={'Loop_Count': 'Loops'}))
 
-    # Chunking / Scrolling engine
+    # Chunking / Scrolling engine for long main pages
     if not display_df.empty:
         total_rows = len(display_df)
         start_row = st.session_state.row_chunk * ROWS_PER_SCREEN
         end_row = start_row + ROWS_PER_SCREEN
         
         sliced_df = display_df.iloc[start_row:end_row]
-        st.table(sliced_df[['Position', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']].rename(columns={'Loop_Count': 'Loops'}))
+        st.table(sliced_df[cols_to_show].rename(columns={'Loop_Count': 'Loops'}))
         
         if end_row >= total_rows:
             st.session_state.row_chunk = 0
@@ -184,6 +190,7 @@ else:
         else:
             st.session_state.row_chunk += 1
     else:
+        # Dashboard layout logic progression
         st.session_state.row_chunk = 0
         st.session_state.view_index += 1
 
