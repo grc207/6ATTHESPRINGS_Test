@@ -7,8 +7,8 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="LIVE LEADERBOARD", layout="wide")
 
-# Direct Imgur cloud-delivery asset link
-LOGO_URL = "https://i.imgur.com/7D2Nf0w.png" 
+# Re-hosted on postimages to bypass Imgur's hotlink blocking
+LOGO_URL = "https://i.postimg.cc/zX399yV4/7D2Nf0w.png" 
 
 st.markdown(
     f"""
@@ -91,7 +91,7 @@ def get_processed_data():
         def calc_elapsed(ts_str):
             try:
                 ts = datetime.strptime(str(ts_str).split()[-1], "%H:%M:%S")
-                delta = ts - start_time
+                delta = ts = ts - start_time
                 hours, remainder = divmod(delta.seconds, 3600)
                 minutes, seconds = divmod(remainder, 60)
                 return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
@@ -100,9 +100,11 @@ def get_processed_data():
                 
         df['Overall Time'] = df['Last_Read'].apply(calc_elapsed)
         
-        # Split pools completely using Column E ('distance') instead of checking ages
-        adult_df = df[df['distance'].str.strip().str.upper() == '6HR'].copy()
-        youth_df = df[df['distance'].str.strip().str.upper() == 'YOUTH'].copy()
+        # Clean and split pools using Column E ('distance') with robust whitespace/case handling
+        df['distance'] = df['distance'].astype(str).str.strip().str.upper()
+        
+        adult_df = df[df['distance'] == '6HR'].copy()
+        youth_df = df[df['distance'] == 'YOUTH'].copy()
         
         # Strict Sorting: Loops (Highest) -> Last Read Timestamp (Earliest)
         adult_df = adult_df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
@@ -124,19 +126,19 @@ if not adult_data.empty:
     adult_data['Class Place'] = ""
     m_count, f_count = 1, 1
     for idx, row in adult_data.iterrows():
-        if str(row['gender']).upper() == 'M':
+        if str(row['gender']).upper().strip() == 'M':
             adult_data.at[idx, 'Class Place'] = f"M{m_count}"
             m_count += 1
-        elif str(row['gender']).upper() == 'F':
+        elif str(row['gender']).upper().strip() == 'F':
             adult_data.at[idx, 'Class Place'] = f"F{f_count}"
             f_count += 1
 
 if not youth_data.empty:
     # Generate division ranking explicitly for the youth pool (Starting strictly at 1)
-    youth_data['Division Place'] = [f"Y{i+1}" for i in range(len(youth_data))]
+    youth_data['Class Place'] = [f"Y{i+1}" for i in range(len(youth_data))]
 
 # 4. Cycle & Chunk State Setup
-views = ["OVERALL 6-HOUR", "FEMALE 6-HOUR", "MALE 6-HOUR", "PODIUM & YOUTH"]
+views = ["OVERALL 6-HOUR", "FEMALE 6-HOUR", "MALE 6-HOUR", "TOP 5 DASHBOARD", "YOUTH DIVISION"]
 
 if 'view_index' not in st.session_state:
     st.session_state.view_index = 0
@@ -160,20 +162,24 @@ else:
         cols_to_show = ['Position', 'Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
         
     elif current_view == "FEMALE 6-HOUR":
-        display_df = adult_data[adult_data['gender'].str.upper() == 'F'].copy()
+        display_df = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].copy()
         cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
         
     elif current_view == "MALE 6-HOUR":
-        display_df = adult_data[adult_data['gender'].str.upper() == 'M'].copy()
+        display_df = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].copy()
         cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
         
-    elif current_view == "PODIUM & YOUTH":
+    elif current_view == "YOUTH DIVISION":
+        display_df = youth_data.copy()
+        cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
+        
+    elif current_view == "TOP 5 DASHBOARD":
         col1, col2 = st.columns(2)
         podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
         
         with col1:
             st.markdown("<h3 style='text-align: center;'>🏃‍♂️ Top 5 Men</h3>", unsafe_allow_html=True)
-            top_m = adult_data[adult_data['gender'].str.upper() == 'M'].head(5).copy()
+            top_m = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].head(5).copy()
             if not top_m.empty:
                 st.table(top_m[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
             else:
@@ -181,20 +187,13 @@ else:
             
         with col2:
             st.markdown("<h3 style='text-align: center;'>🏃‍♀️ Top 5 Women</h3>", unsafe_allow_html=True)
-            top_f = adult_data[adult_data['gender'].str.upper() == 'F'].head(5).copy()
+            top_f = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].head(5).copy()
             if not top_f.empty:
                 st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
             else:
                 st.write("No entries yet")
-            
-        st.markdown("<br><hr><br>", unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align: center;'>🧒 All Youth Division</h3>", unsafe_allow_html=True)
-        if not youth_data.empty:
-            st.table(youth_data[['Division Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']].rename(columns={'Loop_Count': 'Loops', 'Division Place': 'Class Place'}), hide_index=True)
-        else:
-            st.write("No youth reads logged yet")
 
-    # Chunking / Scrolling engine for standard categories
+    # Chunking / Scrolling engine for standard lists
     if not display_df.empty:
         total_rows = len(display_df)
         start_row = st.session_state.row_chunk * ROWS_PER_SCREEN
@@ -209,7 +208,7 @@ else:
         else:
             st.session_state.row_chunk += 1
     else:
-        # Step through layout index when transitioning past the Podium dashboard view
+        # Step through layout index immediately if transitioning past the static Dashboard layout
         st.session_state.row_chunk = 0
         st.session_state.view_index += 1
 
