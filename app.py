@@ -271,6 +271,6 @@ else:
         st.session_state.row_chunk = 0
         st.session_state.view_index += 1
 
-# 6. Refresh interval (20 seconds)
-time.sleep(20)
+# 6. Refresh interval (30 seconds)
+time.sleep(30)
 st.rerun()
