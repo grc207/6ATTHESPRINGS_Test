@@ -3,38 +3,55 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import time
 from datetime import datetime
+import base64
+import os
 
 # 1. Page Configuration
 st.set_page_config(page_title="LIVE LEADERBOARD", layout="wide")
 
-# Native raw GitHub hosting link to prevent browser hotlink blocking
-LOGO_URL = "https://raw.githubusercontent.com/streamlit/tarbell/master/tests/data/logo.png" 
+# --- SECURE BACKGROUND LOGO ENGINE ---
+# Looks for "logo.png" in your repository directory. If found, encodes it locally to bypass browser blocking.
+LOCAL_IMAGE_PATH = "logo.png"
+bg_image_css = ""
+
+if os.path.exists(LOCAL_IMAGE_PATH):
+    try:
+        with open(LOCAL_IMAGE_PATH, "rb") as image_file:
+            encoded_string = base64.b64encode(image_file.read()).decode()
+        bg_image_css = f"background-image: linear-gradient(rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.94)), url(data:image/png;base64,{encoded_string});"
+    except Exception:
+        # Fallback if image reading fails
+        bg_image_css = "background-color: #f9f9f9;"
+else:
+    # Backup placeholder if logo.png hasn't been uploaded to the repo yet
+    bg_image_css = "background-color: #f9f9f9;"
 
 st.markdown(
     f"""
     <style>
-    /* Tighten top margins to push tables as high up the monitor as possible */
+    /* Tighten top container margins to maximize monitor vertical space */
     .block-container {{
-        padding-top: 1.5rem !important;
+        padding-top: 1.0rem !important;
         padding-bottom: 0rem !important;
     }}
     
     /* Full-screen faint background logo */
     .stApp {{
-        background-image: linear-gradient(rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.94)), url("{LOGO_URL}");
+        {bg_image_css}
         background-size: contain;
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
     }}
     
-    /* Shrunk, centered title layout */
+    /* Shrunk title layout (-30% adjustment for monitor headroom) */
     h1 {{
-        font-size: 42px !important;
+        font-size: 30px !important;
         margin-top: 0px !important;
-        margin-bottom: 15px !important;
+        margin-bottom: 10px !important;
         padding-top: 0px !important;
         text-align: center !important;
+        font-weight: bold !important;
     }}
     
     /* Center-aligned, minimalist, border-free table design */
@@ -52,11 +69,11 @@ st.markdown(
         font-size: 28px !important;
         font-weight: bold !important;
         text-align: center !important;
-        padding: 10px !important;
+        padding: 8px !important;
         border-bottom: 2px solid #444444 !important;
     }}
     td {{
-        padding: 12px !important;
+        padding: 10px !important;
         font-weight: 500 !important;
         text-align: center !important;
         border-bottom: 1px solid #e0e0e0 !important;
@@ -115,7 +132,7 @@ def get_processed_data():
                 
         df['Overall Time'] = df['Last_Read'].apply(calc_elapsed)
         
-        # FIXED: Look for ANY distance row containing the word "Youth" case-insensitively
+        # Look for ANY distance row containing the word "Youth" case-insensitively
         df['distance'] = df['distance'].astype(str).str.strip()
         youth_mask = df['distance'].str.contains("Youth", case=False, na=False)
         
@@ -211,7 +228,7 @@ else:
             else:
                 st.write("No entries yet")
 
-    # FIXED scrolling/chunking architecture for long lists
+    # Complete scrolling/chunking architecture for long lists
     if not is_dashboard:
         total_rows = len(display_df)
         
