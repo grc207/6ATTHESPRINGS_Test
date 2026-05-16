@@ -7,8 +7,8 @@ from datetime import datetime
 # 1. Page Configuration
 st.set_page_config(page_title="LIVE LEADERBOARD", layout="wide")
 
-# Pointing to the direct, raw image delivery domain from Imgur
-LOGO_URL = "https://i.imgur.com/nNmcwys.png" 
+# Direct Imgur cloud-delivery asset link
+LOGO_URL = "https://i.imgur.com/7D2Nf0w.png" 
 
 st.markdown(
     f"""
@@ -63,7 +63,6 @@ def get_processed_data():
         # Clean roster columns and compile Name
         roster['Bib'] = pd.to_numeric(roster['Bib'], errors='coerce').fillna(0).astype(int)
         roster['Name'] = roster['First Name'].astype(str) + " " + roster['Last Name'].astype(str)
-        roster['Age'] = pd.to_numeric(roster['Age'], errors='coerce').fillna(0).astype(int)
         
         # Load Raw Reads from "Data Input"
         reads = conn.read(worksheet="Data Input", ttl="0s")
@@ -85,9 +84,6 @@ def get_processed_data():
         # Merge raw metrics with runner details
         df = pd.merge(roster, stats, on='Bib', how='inner')
         
-        # Filter for the 6HR event using your exact column name: 'distance'
-        df = df[df['distance'].str.contains("6HR", na=False, case=False)].copy()
-        
         # Calculate Mileage (1 read = 1 loop = 4 miles)
         df['Mileage'] = df['Loop_Count'] * 4
         
@@ -104,12 +100,11 @@ def get_processed_data():
                 
         df['Overall Time'] = df['Last_Read'].apply(calc_elapsed)
         
-        # Split Youth completely out before assigning any rankings
-        youth_mask = df['Age'] < 18
-        youth_df = df[youth_mask].copy()
-        adult_df = df[~youth_mask].copy()
+        # Split pools completely using Column E ('distance') instead of checking ages
+        adult_df = df[df['distance'].str.strip().str.upper() == '6HR'].copy()
+        youth_df = df[df['distance'].str.strip().str.upper() == 'YOUTH'].copy()
         
-        # Strict Sorting for both pools: Loops (Highest) -> Last Read Timestamp (Earliest)
+        # Strict Sorting: Loops (Highest) -> Last Read Timestamp (Earliest)
         adult_df = adult_df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
         youth_df = youth_df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
         
@@ -118,7 +113,7 @@ def get_processed_data():
         st.error(f"Error processing live data: {e}")
         return pd.DataFrame(), pd.DataFrame()
 
-# 3. Process Live Metrics and Split Positions
+# 3. Process Live Metrics and Assign Rankings
 adult_data, youth_data = get_processed_data()
 
 if not adult_data.empty:
@@ -180,7 +175,7 @@ else:
             st.markdown("<h3 style='text-align: center;'>🏃‍♂️ Top 5 Men</h3>", unsafe_allow_html=True)
             top_m = adult_data[adult_data['gender'].str.upper() == 'M'].head(5).copy()
             if not top_m.empty:
-                st.table(top_m[podium_cols].rename(columns={'Loop_Count': 'Loops'}))
+                st.table(top_m[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
             else:
                 st.write("No entries yet")
             
@@ -188,14 +183,14 @@ else:
             st.markdown("<h3 style='text-align: center;'>🏃‍♀️ Top 5 Women</h3>", unsafe_allow_html=True)
             top_f = adult_data[adult_data['gender'].str.upper() == 'F'].head(5).copy()
             if not top_f.empty:
-                st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}))
+                st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
             else:
                 st.write("No entries yet")
             
         st.markdown("<br><hr><br>", unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align: center;'>🧒 All Youth (Under 18)</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align: center;'>🧒 All Youth Division</h3>", unsafe_allow_html=True)
         if not youth_data.empty:
-            st.table(youth_data[['Division Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']].rename(columns={'Loop_Count': 'Loops', 'Division Place': 'Class Place'}))
+            st.table(youth_data[['Division Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']].rename(columns={'Loop_Count': 'Loops', 'Division Place': 'Class Place'}), hide_index=True)
         else:
             st.write("No youth reads logged yet")
 
@@ -206,7 +201,7 @@ else:
         end_row = start_row + ROWS_PER_SCREEN
         
         sliced_df = display_df.iloc[start_row:end_row]
-        st.table(sliced_df[cols_to_show].rename(columns={'Loop_Count': 'Loops'}))
+        st.table(sliced_df[cols_to_show].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
         
         if end_row >= total_rows:
             st.session_state.row_chunk = 0
