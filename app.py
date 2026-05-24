@@ -65,7 +65,7 @@ st.markdown(
         color: #222222 !important;
     }}
     
-    /* Standard rolling table styles */
+    /* Standard table styles */
     table {{
         width: 100% !important;
         font-size: 24px !important;
@@ -90,20 +90,20 @@ st.markdown(
         border-bottom: 1px solid #e0e0e0 !important;
     }}
     
-    /* CSS Target Rule: ONLY apply full grid borders to tables sitting inside our custom Dashboard container */
-    div.dashboard-container table {{
+    /* CRITICAL FIX: Isolated dashboard border rules to prevent leaking onto other pages */
+    .dashboard-table table {{
         border: 2px solid #555555 !important;
     }}
-    div.dashboard-container th {{
+    .dashboard-table th {{
         border: 1px solid #555555 !important;
         border-bottom: 2px solid #555555 !important;
         background-color: rgba(0, 0, 0, 0.02) !important;
     }}
-    div.dashboard-container td {{
+    .dashboard-table td {{
         border: 1px solid #555555 !important;
     }}
     
-    /* Hide background loading text updates so screen flashes are completely gone */
+    /* Hide background loading spinners for ultra-clean page transitions */
     div[data-testid="stStatusWidget"] {{
         display: none !important;
     }}
@@ -118,7 +118,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def get_processed_data():
     for attempt in range(3):
         try:
-            # 60s Local cache protecting Google API limit thresholds
+            # Set to 60 seconds to protect API limits while preserving rapid page turns
             roster = conn.read(worksheet="Runner Data", ttl="60s")
             roster.columns = roster.columns.str.strip()
             
@@ -245,40 +245,42 @@ else:
         is_dashboard = True
         podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
         
-        # Lock everything dashboard-related inside a single native container block
-        with st.container():
-            st.markdown('<div class="dashboard-container">', unsafe_allow_html=True)
+        # Row 1: Men and Women side-by-side
+        top_row_cols = st.columns(2)
+        with top_row_cols[0]:
+            st.markdown("<h3 style='text-align: center; margin-top:0px;'>🏃‍♂️ Top 5 Men</h3>", unsafe_allow_html=True)
+            top_m = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].head(5).copy()
+            if not top_m.empty:
+                st.markdown('<div class="dashboard-table">', unsafe_allow_html=True)
+                st.table(top_m[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.write("No entries yet")
             
-            # Top Split Row: Men and Women
-            top_cols = st.columns(2)
-            with top_cols[0]:
-                st.markdown("<h3 style='text-align: center; margin-top:0px;'>🏃‍♂️ Top 5 Men</h3>", unsafe_allow_html=True)
-                top_m = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].head(5).copy()
-                if not top_m.empty:
-                    st.table(top_m[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
-                else:
-                    st.write("No entries yet")
-                    
-            with top_cols[1]:
-                st.markdown("<h3 style='text-align: center; margin-top:0px;'>🏃‍♀️ Top 5 Women</h3>", unsafe_allow_html=True)
-                top_f = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].head(5).copy()
-                if not top_f.empty:
-                    st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
-                else:
-                    st.write("No entries yet")
-            
-            # Bottom Center Row: Non-Binary
+        with top_row_cols[1]:
+            st.markdown("<h3 style='text-align: center; margin-top:0px;'>🏃‍♀️ Top 5 Women</h3>", unsafe_allow_html=True)
+            top_f = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].head(5).copy()
+            if not top_f.empty:
+                st.markdown('<div class="dashboard-table">', unsafe_allow_html=True)
+                st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.write("No entries yet")
+                
+        # FIXED: Row 2 elements are now completely wrapped inside the dashboard view check
+        st.markdown("<br>", unsafe_allow_html=True)
+        bottom_row_cols = st.columns([1, 2, 1])
+        with bottom_row_cols[1]:
+            st.markdown("<h3 style='text-align: center; margin-top: 0px;'>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
             top_x = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].copy()
             if not top_x.empty:
-                st.markdown("<br>", unsafe_allow_html=True)
-                bottom_cols = st.columns([1, 2, 1])
-                with bottom_cols[1]:
-                    st.markdown("<h3 style='text-align: center; margin-top: 0px;'>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
-                    st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
-                    
-            st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown('<div class="dashboard-table">', unsafe_allow_html=True)
+                st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.write("No entries yet")
 
-    # 6. Complete scrolling/chunking architecture for long lists
+    # Complete scrolling/chunking architecture for long lists
     if not is_dashboard:
         total_rows = len(display_df)
         
@@ -301,6 +303,6 @@ else:
         st.session_state.row_chunk = 0
         st.session_state.view_index += 1
 
-# 7. Apply dynamic view delays
+# 6. Apply dynamic view delays
 time.sleep(CURRENT_SCREEN_TIME)
 st.rerun()
