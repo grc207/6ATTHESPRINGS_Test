@@ -90,32 +90,30 @@ st.markdown(
         border-bottom: 1px solid #e0e0e0 !important;
     }}
     
-    /* Isolated dashboard border rules to prevent leaking onto other pages */
-    .dashboard-table table {{
+    /* --- 20% SCALED DOWN DASHBOARD SKIN --- */
+    .dashboard-scaled h3 {{
+        font-size: 18px !important; /* Down from 22px */
+    }}
+    .dashboard-scaled table {{
+        font-size: 19px !important; /* Down from 24px */
         border: 2px solid #555555 !important;
     }}
-    .dashboard-table th {{
+    .dashboard-scaled th {{
+        font-size: 21px !important; /* Down from 26px */
+        padding: 6px !important;
         border: 1px solid #555555 !important;
         border-bottom: 2px solid #555555 !important;
         background-color: rgba(0, 0, 0, 0.02) !important;
     }}
-    .dashboard-table td {{
+    .dashboard-scaled td {{
+        padding: 6px !important;
         border: 1px solid #555555 !important;
     }}
     
-    /* Custom CSS container to align and center the dashboard non-binary grid cleanly */
+    /* Specific override to keep the bottom table centered but compact */
     .centered-dashboard-block table {{
         max-width: 50% !important;
         margin: 0 auto !important;
-        border: 2px solid #555555 !important;
-    }}
-    .centered-dashboard-block th {{
-        border: 1px solid #555555 !important;
-        border-bottom: 2px solid #555555 !important;
-        background-color: rgba(0, 0, 0, 0.02) !important;
-    }}
-    .centered-dashboard-block td {{
-        border: 1px solid #555555 !important;
     }}
     
     /* Hide background loading spinners for ultra-clean page transitions */
@@ -229,7 +227,7 @@ elif current_view == "TOP RUNNERS DASHBOARD":
 else:
     CURRENT_SCREEN_TIME = 5
 
-# 5. Render Layout Title (Skip adding main banner title on Dashboard view)
+# 5. Render Layout Title
 if current_view != "TOP RUNNERS DASHBOARD":
     st.markdown(f"<h1>🏆 {current_view}</h1>", unsafe_allow_html=True)
 
@@ -260,15 +258,16 @@ else:
         is_dashboard = True
         podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
         
+        # Open scaling wrapper for dashboard components
+        st.markdown('<div class="dashboard-scaled">', unsafe_allow_html=True)
+        
         # Row 1: Men and Women side-by-side
         top_row_cols = st.columns(2)
         with top_row_cols[0]:
             st.markdown("<h3 style='text-align: center; margin-top:0px;'>🏃‍♂️ Top 5 Men</h3>", unsafe_allow_html=True)
             top_m = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].head(5).copy()
             if not top_m.empty:
-                st.markdown('<div class="dashboard-table">', unsafe_allow_html=True)
                 st.table(top_m[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
-                st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.write("No entries yet")
             
@@ -276,19 +275,20 @@ else:
             st.markdown("<h3 style='text-align: center; margin-top:0px;'>🏃‍♀️ Top 5 Women</h3>", unsafe_allow_html=True)
             top_f = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].head(5).copy()
             if not top_f.empty:
-                st.markdown('<div class="dashboard-table">', unsafe_allow_html=True)
                 st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
-                st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.write("No entries yet")
                 
-        # Row 2: Fixed isolated data check specifically targeting Non-Binary values ('X')
+        # Row 2: Strictly enclosed within the unique dashboard loop wrapper block
         top_x = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].head(5).copy()
         if not top_x.empty:
             st.markdown("<br><h3 style='text-align: center; margin-top: 0px;'>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
             st.markdown('<div class="centered-dashboard-block">', unsafe_allow_html=True)
             st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
             st.markdown('</div>', unsafe_allow_html=True)
+            
+        # Close dashboard scaling wrapper
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # 6. Complete scrolling/chunking architecture for long lists
     if not is_dashboard:
