@@ -219,15 +219,17 @@ elif current_view == "TOP RUNNERS DASHBOARD":
 else:
     CURRENT_SCREEN_TIME = 5
 
-# Master rendering placeholder context
-display_container = st.empty()
+# Create a master layout key string using both the current view name and the row chunk.
+# This forces Streamlit to cleanly tear down the entire page canvas if EITHER changes.
+unique_layout_key = f"canvas_v{st.session_state.view_index}_c{st.session_state.row_chunk}"
 
 if adult_data.empty and youth_data.empty:
-    display_container.info("Awaiting initial RFID reads...")
+    st.info("Awaiting initial RFID reads...")
 else:
-    if current_view != "TOP RUNNERS DASHBOARD":
-        # 5A. Handle regular scrolling list views cleanly
-        with display_container.container():
+    # 5. Dynamic Container Key Architecture
+    with st.container(key=unique_layout_key):
+        if current_view != "TOP RUNNERS DASHBOARD":
+            # --- STANDARD LIST VIEW PATH ---
             st.markdown(f"<h1>🏆 {current_view}</h1>", unsafe_allow_html=True)
             
             cols_to_show = []
@@ -266,12 +268,10 @@ else:
                 st.session_state.row_chunk = 0
                 st.session_state.view_index += 1
 
-    else:
-        # 5B. Handle Top 5 Podium Dashboard layout cleanly using native st layout trees
-        with display_container.container():
+        else:
+            # --- PODIUM DASHBOARD PATH ---
             podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
             
-            # Pure CSS scaling wrapper block (No customized table alignment tag structures inside)
             st.markdown('<div class="dashboard-scaled">', unsafe_allow_html=True)
             
             dash_cols = st.columns(2)
@@ -291,12 +291,12 @@ else:
                 else:
                     st.write("No entries yet")
             
-            # Render Non-Binary centered 50% cleanly using native layout logic instead of custom HTML strings
+            # Non-Binary center rendering natively inside columns
             top_x = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].head(5).copy()
             if not top_x.empty:
                 st.markdown("<br>", unsafe_allow_html=True)
-                nb_cols = st.columns([1, 2, 1]) # Standard 25% | 50% | 25% configuration
-                with nb_cols[1]: # This centers the middle block completely safely
+                nb_cols = st.columns([1, 2, 1])
+                with nb_cols[1]:
                     st.markdown("<h3>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
                     st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
                 
@@ -305,6 +305,6 @@ else:
             st.session_state.row_chunk = 0
             st.session_state.view_index += 1
 
-# 6. Apply dynamic view delays
+# 6. Global single delay and rerun architecture
 time.sleep(CURRENT_SCREEN_TIME)
 st.rerun()
