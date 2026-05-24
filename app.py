@@ -219,16 +219,15 @@ elif current_view == "TOP RUNNERS DASHBOARD":
 else:
     CURRENT_SCREEN_TIME = 5
 
-# Master Layout Placeholder — This forces a total visual wipe between redraws
+# Master rendering placeholder
 main_view_placeholder = st.empty()
 
 if adult_data.empty and youth_data.empty:
     main_view_placeholder.info("Awaiting initial RFID reads...")
 else:
-    # Open a pristine context inside the empty layout canvas
     with main_view_placeholder.container():
         if current_view != "TOP RUNNERS DASHBOARD":
-            # --- STANDARD FULL-WIDTH LIST VIEW PATH ---
+            # --- STANDARD LIST VIEW PATH ---
             st.markdown(f"<h1>🏆 {current_view}</h1>", unsafe_allow_html=True)
             
             cols_to_show = []
@@ -268,13 +267,15 @@ else:
                 st.session_state.view_index += 1
 
         else:
-            # --- BEAUTIFUL, WIDE DASHBOARD PATH (NO GHOSTS) ---
+            # --- CLEAN FIXED 2-COLUMN DASHBOARD PATH ---
             podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
             
             st.markdown('<div class="dashboard-scaled">', unsafe_allow_html=True)
             
-            # Row 1: Men & Women clean 50/50 Split
+            # Create a simple, permanent 2-column layout block
             dash_cols = st.columns(2)
+            
+            # Left Column content (Men, then Non-Binary right underneath)
             with dash_cols[0]:
                 st.markdown("<h3>🏃‍♂️ Top 5 Men</h3>", unsafe_allow_html=True)
                 top_m = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].head(5).copy()
@@ -282,7 +283,15 @@ else:
                     st.table(top_m[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
                 else:
                     st.write("No entries yet")
-                    
+                
+                # Check for Non-Binary runners and tuck them smoothly directly under the Men's table
+                top_x = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].head(5).copy()
+                if not top_x.empty:
+                    st.markdown("<br><br>", unsafe_allow_html=True)
+                    st.markdown("<h3>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
+                    st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+            
+            # Right Column content (Women)
             with dash_cols[1]:
                 st.markdown("<h3>🏃‍♀️ Top 5 Women</h3>", unsafe_allow_html=True)
                 top_f = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].head(5).copy()
@@ -290,21 +299,12 @@ else:
                     st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
                 else:
                     st.write("No entries yet")
-            
-            # Row 2: Non-Binary centered smoothly via a completely fresh 3-column layout row
-            top_x = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].head(5).copy()
-            if not top_x.empty:
-                st.markdown("<br>", unsafe_allow_html=True)
-                nb_row_cols = st.columns([1, 2, 1])  # 25% | 50% | 25% perfectly fills screen space
-                with nb_row_cols[1]:
-                    st.markdown("<h3>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
-                    st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
                 
             st.markdown('</div>', unsafe_allow_html=True)
             
             st.session_state.row_chunk = 0
             st.session_state.view_index += 1
 
-# 6. Smooth dynamic layout delay and loop rerun execution
+# 7. Transition management loop rerun
 time.sleep(CURRENT_SCREEN_TIME)
 st.rerun()
