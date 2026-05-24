@@ -90,7 +90,7 @@ st.markdown(
         border-bottom: 1px solid #e0e0e0 !important;
     }}
     
-    /* CRITICAL FIX: Isolated dashboard border rules to prevent leaking onto other pages */
+    /* Isolated dashboard border rules to prevent leaking onto other pages */
     .dashboard-table table {{
         border: 2px solid #555555 !important;
     }}
@@ -103,7 +103,7 @@ st.markdown(
         border: 1px solid #555555 !important;
     }}
     
-    /* Custom layout rule to center-align the dashboard non-binary table without using buggy column blocks */
+    /* Custom layout engine to safely center-align the non-binary dashboard block */
     .centered-dashboard-block table {{
         max-width: 50% !important;
         margin: 0 auto !important;
@@ -229,7 +229,7 @@ elif current_view == "TOP RUNNERS DASHBOARD":
 else:
     CURRENT_SCREEN_TIME = 5
 
-# 5. Render Layout Title (Top Runners title logic removed if view match)
+# 5. Render Layout Title (Skips title bar entirely on dashboard view)
 if current_view != "TOP RUNNERS DASHBOARD":
     st.markdown(f"<h1>🏆 {current_view}</h1>", unsafe_allow_html=True)
 
@@ -282,11 +282,37 @@ else:
             else:
                 st.write("No entries yet")
                 
-        # Row 2: Purely Isolated CSS Centered Table (No layout column code used)
+        # Row 2: Isolated CSS alignment container (Prevents layout table leaks on scrolling views)
         top_x = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].copy()
         if not top_x.empty:
             st.markdown("<br><h3 style='text-align: center; margin-top: 0px;'>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
             st.markdown('<div class="centered-dashboard-block">', unsafe_allow_html=True)
             st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
-            st.markdown('</div>', unsafe_allow_html=)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    # 6. Complete scrolling/chunking architecture for long lists
+    if not is_dashboard:
+        total_rows = len(display_df)
+        
+        if total_rows > 0:
+            start_row = st.session_state.row_chunk * ROWS_PER_SCREEN
+            end_row = start_row + ROWS_PER_SCREEN
             
+            sliced_df = display_df.iloc[start_row:end_row]
+            st.table(sliced_df[cols_to_show].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+            
+            if end_row >= total_rows:
+                st.session_state.row_chunk = 0
+                st.session_state.view_index += 1
+            else:
+                st.session_state.row_chunk += 1
+        else:
+            st.session_state.row_chunk = 0
+            st.session_state.view_index += 1
+    else:
+        st.session_state.row_chunk = 0
+        st.session_state.view_index += 1
+
+# 7. Apply dynamic view delays
+time.sleep(CURRENT_SCREEN_TIME)
+st.rerun()
