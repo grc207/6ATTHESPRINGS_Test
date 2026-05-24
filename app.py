@@ -58,13 +58,6 @@ st.markdown(
         color: #111111 !important;
     }}
     
-    /* Subheaders for dashboard panels */
-    h3 {{
-        font-size: 22px !important;
-        font-weight: bold !important;
-        color: #222222 !important;
-    }}
-    
     /* Standard table styles */
     table {{
         width: 100% !important;
@@ -93,6 +86,11 @@ st.markdown(
     /* --- 20% SCALED DOWN DASHBOARD SKIN --- */
     .dashboard-scaled h3 {{
         font-size: 18px !important; /* Down from 22px */
+        font-weight: bold !important;
+        color: #222222 !important;
+        text-align: center !important;
+        margin-top: 0px !important;
+        margin-bottom: 8px !important;
     }}
     .dashboard-scaled table {{
         font-size: 19px !important; /* Down from 24px */
@@ -110,8 +108,8 @@ st.markdown(
         border: 1px solid #555555 !important;
     }}
     
-    /* Specific override to keep the bottom table centered but compact */
-    .centered-dashboard-block table {{
+    /* Center and constrain the single non-binary block table width on dashboard */
+    .centered-nb-block table {{
         max-width: 50% !important;
         margin: 0 auto !important;
     }}
@@ -227,92 +225,92 @@ elif current_view == "TOP RUNNERS DASHBOARD":
 else:
     CURRENT_SCREEN_TIME = 5
 
-# 5. Render Layout Title
-if current_view != "TOP RUNNERS DASHBOARD":
-    st.markdown(f"<h1>🏆 {current_view}</h1>", unsafe_allow_html=True)
+# Create a clean standalone container for rendering content
+display_container = st.container()
 
 if adult_data.empty and youth_data.empty:
-    st.info("Awaiting initial RFID reads...")
+    with display_container:
+        st.info("Awaiting initial RFID reads...")
 else:
-    cols_to_show = []
-    display_df = pd.DataFrame()
-    is_dashboard = False
-    
-    if current_view == "OVERALL 6-HOUR":
-        display_df = adult_data.copy()
-        cols_to_show = ['Position', 'Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
-        
-    elif current_view == "FEMALE 6-HOUR":
-        display_df = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].copy()
-        cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
-        
-    elif current_view == "MALE 6-HOUR":
-        display_df = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].copy()
-        cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
-        
-    elif current_view == "YOUTH DIVISION":
-        display_df = youth_data.copy()
-        cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
-        
-    elif current_view == "TOP RUNNERS DASHBOARD":
-        is_dashboard = True
-        podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
-        
-        # Open scaling wrapper for dashboard components
-        st.markdown('<div class="dashboard-scaled">', unsafe_allow_html=True)
-        
-        # Row 1: Men and Women side-by-side
-        top_row_cols = st.columns(2)
-        with top_row_cols[0]:
-            st.markdown("<h3 style='text-align: center; margin-top:0px;'>🏃‍♂️ Top 5 Men</h3>", unsafe_allow_html=True)
-            top_m = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].head(5).copy()
-            if not top_m.empty:
-                st.table(top_m[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
-            else:
-                st.write("No entries yet")
+    if current_view != "TOP RUNNERS DASHBOARD":
+        # Standard List View rendering block
+        with display_container:
+            st.markdown(f"<h1>🏆 {current_view}</h1>", unsafe_allow_html=True)
             
-        with top_row_cols[1]:
-            st.markdown("<h3 style='text-align: center; margin-top:0px;'>🏃‍♀️ Top 5 Women</h3>", unsafe_allow_html=True)
-            top_f = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].head(5).copy()
-            if not top_f.empty:
-                st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
-            else:
-                st.write("No entries yet")
+            cols_to_show = []
+            display_df = pd.DataFrame()
+            
+            if current_view == "OVERALL 6-HOUR":
+                display_df = adult_data.copy()
+                cols_to_show = ['Position', 'Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
                 
-        # Row 2: Strictly enclosed within the unique dashboard loop wrapper block
-        top_x = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].head(5).copy()
-        if not top_x.empty:
-            st.markdown("<br><h3 style='text-align: center; margin-top: 0px;'>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
-            st.markdown('<div class="centered-dashboard-block">', unsafe_allow_html=True)
-            st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-        # Close dashboard scaling wrapper
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # 6. Complete scrolling/chunking architecture for long lists
-    if not is_dashboard:
-        total_rows = len(display_df)
-        
-        if total_rows > 0:
-            start_row = st.session_state.row_chunk * ROWS_PER_SCREEN
-            end_row = start_row + ROWS_PER_SCREEN
-            
-            sliced_df = display_df.iloc[start_row:end_row]
-            st.table(sliced_df[cols_to_show].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
-            
-            if end_row >= total_rows:
+            elif current_view == "FEMALE 6-HOUR":
+                display_df = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].copy()
+                cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
+                
+            elif current_view == "MALE 6-HOUR":
+                display_df = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].copy()
+                cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
+                
+            elif current_view == "YOUTH DIVISION":
+                display_df = youth_data.copy()
+                cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
+                
+            total_rows = len(display_df)
+            if total_rows > 0:
+                start_row = st.session_state.row_chunk * ROWS_PER_SCREEN
+                end_row = start_row + ROWS_PER_SCREEN
+                
+                sliced_df = display_df.iloc[start_row:end_row]
+                st.table(sliced_df[cols_to_show].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+                
+                if end_row >= total_rows:
+                    st.session_state.row_chunk = 0
+                    st.session_state.view_index += 1
+                else:
+                    st.session_state.row_chunk += 1
+            else:
                 st.session_state.row_chunk = 0
                 st.session_state.view_index += 1
-            else:
-                st.session_state.row_chunk += 1
-        else:
-            st.session_state.row_chunk = 0
-            st.session_state.view_index += 1
+
     else:
+        # 5. Dashboard View Block (Strictly isolated from everything else)
+        with display_container:
+            podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
+            
+            # Encapsulate entire structure in custom scaled HTML/CSS wrapper block
+            st.markdown('<div class="dashboard-scaled">', unsafe_allow_html=True)
+            
+            dash_cols = st.columns(2)
+            with dash_cols[0]:
+                st.markdown("<h3>🏃‍♂️ Top 5 Men</h3>", unsafe_allow_html=True)
+                top_m = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].head(5).copy()
+                if not top_m.empty:
+                    st.table(top_m[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+                else:
+                    st.write("No entries yet")
+                    
+            with dash_cols[1]:
+                st.markdown("<h3>🏃‍♀️ Top 5 Women</h3>", unsafe_allow_html=True)
+                top_f = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].head(5).copy()
+                if not top_f.empty:
+                    st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+                else:
+                    st.write("No entries yet")
+            
+            # Bottom centered Non-Binary block (only evaluates if records exist)
+            top_x = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].head(5).copy()
+            if not top_x.empty:
+                st.markdown("<br><h3 style='margin-bottom: 8px;'>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
+                st.markdown('<div class="centered-nb-block">', unsafe_allow_html=True)
+                st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+            st.markdown('</div>', unsafe_allow_html=True)
+            
         st.session_state.row_chunk = 0
         st.session_state.view_index += 1
 
-# 7. Apply dynamic view delays
+# 6. Apply dynamic view delays
 time.sleep(CURRENT_SCREEN_TIME)
 st.rerun()
