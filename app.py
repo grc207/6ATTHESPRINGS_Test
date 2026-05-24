@@ -58,6 +58,13 @@ st.markdown(
         color: #111111 !important;
     }}
     
+    /* Subheaders for dashboard panels */
+    h3 {{
+        font-size: 22px !important;
+        font-weight: bold !important;
+        color: #222222 !important;
+    }}
+    
     /* Standard table styles */
     table {{
         width: 100% !important;
@@ -83,7 +90,7 @@ st.markdown(
         border-bottom: 1px solid #e0e0e0 !important;
     }}
     
-    /* Full borders around Top 5 Dashboard tables */
+    /* Full borders around Dashboard grid tables */
     div[data-testid="stHorizontalBlock"] table {{
         border: 2px solid #555555 !important;
     }}
@@ -104,66 +111,76 @@ st.markdown(
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_processed_data():
-    try:
-        # Load Roster from "Runner Data"
-        roster = conn.read(worksheet="Runner Data", ttl="0s")
-        roster.columns = roster.columns.str.strip()
-        
-        # Clean roster columns and compile Name
-        roster['Bib'] = pd.to_numeric(roster['Bib'], errors='coerce').fillna(0).astype(int)
-        roster['Name'] = roster['First Name'].astype(str) + " " + roster['Last Name'].astype(str)
-        
-        # Load Raw Reads from "Data Input"
-        reads = conn.read(worksheet="Data Input", ttl="0s")
-        reads.columns = reads.columns.str.strip()
-        reads['Bib'] = pd.to_numeric(reads['Bib'], errors='coerce').fillna(0).astype(int)
-        
-        if reads.empty or 'Bib' not in reads.columns:
-            return pd.DataFrame(), pd.DataFrame()
+    # Try up to 3 times to fetch data if Google rate-limits us
+    for attempt in range(3):
+        try:
+            # Load Roster from "Runner Data"
+            roster = conn.read(worksheet="Runner Data", ttl="0s")
+            roster.columns = roster.columns.str.strip()
+            
+            # Clean roster columns and compile Name
+            roster['Bib'] = pd.to_numeric(roster['Bib'], errors='coerce').fillna(0).astype(int)
+            roster['Name'] = roster['First Name'].astype(str) + " " + roster['Last Name'].astype(str)
+            
+            # Load Raw Reads from "Data Input"
+            reads = conn.read(worksheet="Data Input", ttl="0s")
+            reads.columns = reads.columns.str.strip()
+            reads['Bib'] = pd.to_numeric(reads['Bib'], errors='coerce').fillna(0).astype(int)
+            
+            if reads.empty or 'Bib' not in reads.columns:
+                return pd.DataFrame(), pd.DataFrame()
 
-        # Race configuration
-        start_time = datetime.strptime("08:00:00", "%H:%M:%S")
-        
-        # Calculate loops (count of raw reads) and latest read time per bib
-        stats = reads.groupby('Bib').agg(
-            Loop_Count=('Timestamp', 'count'),
-            Last_Read=('Timestamp', 'max')
-        ).reset_index()
-        
-        # Merge raw metrics with runner details
-        df = pd.merge(roster, stats, on='Bib', how='inner')
-        
-        # Calculate Mileage (1 read = 1 loop = 4 miles)
-        df['Mileage'] = df['Loop_Count'] * 4
-        
-        # Calculate Elapsed Time string from 8:00 AM
-        def calc_elapsed(ts_str):
-            try:
-                ts = datetime.strptime(str(ts_str).split()[-1], "%H:%M:%S")
-                delta = ts - start_time
-                hours, remainder = divmod(delta.seconds, 3600)
-                minutes, seconds = divmod(remainder, 60)
-                return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-            except Exception:
-                return "00:00:00"
+            # Race configuration
+            start_time = datetime.strptime("08:00:00", "%H:%M:%S")
+            
+            # Calculate loops (count of raw reads) and latest read time per bib
+            stats = reads.groupby('Bib').agg(
+                Loop_Count=('Timestamp', 'count'),
+                Last_Read=('Timestamp', 'max')
+            ).reset_index()
+            
+            # Merge raw metrics with runner details
+            df = pd.merge(roster, stats, on='Bib', how='inner')
+            
+            # Calculate Mileage (1 read = 1 loop = 4 miles)
+            df['Mileage'] = df['Loop_Count'] * 4
+            
+            # Calculate Elapsed Time string from 8:00 AM
+            def calc_elapsed(ts_str):
+                try:
+                    ts = datetime.strptime(str(ts_str).split()[-1], "%H:%M:%S")
+                    delta = ts - start_time
+                    hours, remainder = divmod(delta.seconds, 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                except Exception:
+                    return "00:00:00"
+                    
+            df['Overall Time'] = df['Last_Read'].apply(calc_elapsed)
+            
+            # Look for ANY distance row containing the word "Youth" case-insensitively
+            df['distance'] = df['distance'].astype(str).str.strip()
+            youth_mask = df['distance'].str.contains("Youth", case=False, na=False)
+            
+            adult_df = df[~youth_mask & df['distance'].str.contains("6HR", case=False, na=False)].copy()
+            youth_df = df[youth_mask].copy()
+            
+            # Strict Sorting: Loops (Highest) -> Last Read Timestamp (Earliest)
+            adult_df = adult_df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
+            youth_df = youth_df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
+            
+            return adult_df, youth_df
+
+        except Exception as e:
+            # If it's a rate limit error, pause and retry
+            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                time.sleep(2)
+                continue
+            else:
+                st.error(f"Error processing live data: {e}")
+                return pd.DataFrame(), pd.DataFrame()
                 
-        df['Overall Time'] = df['Last_Read'].apply(calc_elapsed)
-        
-        # Look for ANY distance row containing the word "Youth" case-insensitively
-        df['distance'] = df['distance'].astype(str).str.strip()
-        youth_mask = df['distance'].str.contains("Youth", case=False, na=False)
-        
-        adult_df = df[~youth_mask & df['distance'].str.contains("6HR", case=False, na=False)].copy()
-        youth_df = df[youth_mask].copy()
-        
-        # Strict Sorting: Loops (Highest) -> Last Read Timestamp (Earliest)
-        adult_df = adult_df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
-        youth_df = youth_df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
-        
-        return adult_df, youth_df
-    except Exception as e:
-        st.error(f"Error processing live data: {e}")
-        return pd.DataFrame(), pd.DataFrame()
+    return pd.DataFrame(), pd.DataFrame()
 
 # 3. Process Live Metrics and Assign Rankings
 adult_data, youth_data = get_processed_data()
@@ -172,23 +189,27 @@ if not adult_data.empty:
     # Generate overall numeric positions for adults (Starting strictly at 1)
     adult_data['Position'] = [i+1 for i in range(len(adult_data))]
     
-    # Generate Class Places for adults only (Starting strictly at 1)
+    # Generate Class Places handling M, F, and X (Non-Binary) categories
     adult_data['Class Place'] = ""
-    m_count, f_count = 1, 1
+    m_count, f_count, x_count = 1, 1, 1
     for idx, row in adult_data.iterrows():
-        if str(row['gender']).upper().strip() == 'M':
+        gen_val = str(row['gender']).upper().strip()
+        if gen_val == 'M':
             adult_data.at[idx, 'Class Place'] = f"M{m_count}"
             m_count += 1
-        elif str(row['gender']).upper().strip() == 'F':
+        elif gen_val == 'F':
             adult_data.at[idx, 'Class Place'] = f"F{f_count}"
             f_count += 1
+        elif gen_val == 'X':
+            adult_data.at[idx, 'Class Place'] = f"X{x_count}"
+            x_count += 1
 
 if not youth_data.empty:
     # Generate division ranking explicitly for the youth pool (Starting strictly at 1)
     youth_data['Class Place'] = [f"Y{i+1}" for i in range(len(youth_data))]
 
-# 4. Cycle & Chunk State Setup
-views = ["OVERALL 6-HOUR", "FEMALE 6-HOUR", "MALE 6-HOUR", "TOP 5 DASHBOARD", "YOUTH DIVISION"]
+# 4. Custom Cycle Order & Variable Speed Architecture
+views = ["OVERALL 6-HOUR", "YOUTH DIVISION", "TOP RUNNERS DASHBOARD", "FEMALE 6-HOUR", "MALE 6-HOUR"]
 
 if 'view_index' not in st.session_state:
     st.session_state.view_index = 0
@@ -197,6 +218,14 @@ if 'row_chunk' not in st.session_state:
 
 current_view = views[st.session_state.view_index % len(views)]
 ROWS_PER_SCREEN = 10 
+
+# Define explicit layout times per display view style
+if current_view == "YOUTH DIVISION":
+    CURRENT_SCREEN_TIME = 10
+elif current_view == "TOP RUNNERS DASHBOARD":
+    CURRENT_SCREEN_TIME = 7
+else:
+    CURRENT_SCREEN_TIME = 5  # 5 seconds each for Overall, Female, and Male lists
 
 # 5. Render Layout Title
 st.markdown(f"<h1>🏆 {current_view}</h1>", unsafe_allow_html=True)
@@ -224,7 +253,7 @@ else:
         display_df = youth_data.copy()
         cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
         
-    elif current_view == "TOP 5 DASHBOARD":
+    elif current_view == "TOP RUNNERS DASHBOARD":
         is_dashboard = True
         col1, col2 = st.columns(2)
         podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
@@ -244,6 +273,13 @@ else:
                 st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
             else:
                 st.write("No entries yet")
+                
+            st.markdown("<h3 style='text-align: center; margin-top: 15px;'>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
+            top_x = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].copy()
+            if not top_x.empty:
+                st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+            else:
+                st.write("No entries yet")
 
     # Complete scrolling/chunking architecture for long lists
     if not is_dashboard:
@@ -256,21 +292,18 @@ else:
             sliced_df = display_df.iloc[start_row:end_row]
             st.table(sliced_df[cols_to_show].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
             
-            # If we reached the end of this category's list, advance the page index
             if end_row >= total_rows:
                 st.session_state.row_chunk = 0
                 st.session_state.view_index += 1
             else:
                 st.session_state.row_chunk += 1
         else:
-            # If an active screen list is entirely empty, skip to the next view instantly
             st.session_state.row_chunk = 0
             st.session_state.view_index += 1
     else:
-        # Dashboard screen doesn't chunk, move directly to next view on the next cycle tick
         st.session_state.row_chunk = 0
         st.session_state.view_index += 1
 
-# 6. Refresh interval (30 seconds)
-time.sleep(30)
+# 6. Apply dynamic view delays
+time.sleep(CURRENT_SCREEN_TIME)
 st.rerun()
