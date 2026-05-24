@@ -108,12 +108,6 @@ st.markdown(
         border: 1px solid #555555 !important;
     }}
     
-    /* Center and constrain the single non-binary block table width on dashboard */
-    .centered-nb-block table {{
-        max-width: 50% !important;
-        margin: 0 auto !important;
-    }}
-    
     /* Hide background loading spinners for ultra-clean page transitions */
     div[data-testid="stStatusWidget"] {{
         display: none !important;
@@ -225,16 +219,15 @@ elif current_view == "TOP RUNNERS DASHBOARD":
 else:
     CURRENT_SCREEN_TIME = 5
 
-# Create a clean, single global structural layout wrapper block
-display_container = st.container()
+# Master rendering placeholder context
+display_container = st.empty()
 
 if adult_data.empty and youth_data.empty:
-    with display_container:
-        st.info("Awaiting initial RFID reads...")
+    display_container.info("Awaiting initial RFID reads...")
 else:
-    with display_container:
-        if current_view != "TOP RUNNERS DASHBOARD":
-            # 5A. Handle regular scrolling list views
+    if current_view != "TOP RUNNERS DASHBOARD":
+        # 5A. Handle regular scrolling list views cleanly
+        with display_container.container():
             st.markdown(f"<h1>🏆 {current_view}</h1>", unsafe_allow_html=True)
             
             cols_to_show = []
@@ -273,11 +266,12 @@ else:
                 st.session_state.row_chunk = 0
                 st.session_state.view_index += 1
 
-        else:
-            # 5B. Handle Top 5 Podium Dashboard layout
+    else:
+        # 5B. Handle Top 5 Podium Dashboard layout cleanly using native st layout trees
+        with display_container.container():
             podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
             
-            # Wrap everything inside a localized custom css container block 
+            # Pure CSS scaling wrapper block (No customized table alignment tag structures inside)
             st.markdown('<div class="dashboard-scaled">', unsafe_allow_html=True)
             
             dash_cols = st.columns(2)
@@ -297,18 +291,20 @@ else:
                 else:
                     st.write("No entries yet")
             
+            # Render Non-Binary centered 50% cleanly using native layout logic instead of custom HTML strings
             top_x = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].head(5).copy()
             if not top_x.empty:
-                st.markdown("<br><h3 style='margin-bottom: 8px;'>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
-                st.markdown('<div class="centered-nb-block">', unsafe_allow_html=True)
-                st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
-                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
+                nb_cols = st.columns([1, 2, 1]) # Standard 25% | 50% | 25% configuration
+                with nb_cols[1]: # This centers the middle block completely safely
+                    st.markdown("<h3>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
+                    st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
                 
             st.markdown('</div>', unsafe_allow_html=True)
             
             st.session_state.row_chunk = 0
             st.session_state.view_index += 1
 
-# 6. Unified Single execution delay point across all states 
+# 6. Apply dynamic view delays
 time.sleep(CURRENT_SCREEN_TIME)
 st.rerun()
