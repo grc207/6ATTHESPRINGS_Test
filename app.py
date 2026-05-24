@@ -225,7 +225,7 @@ elif current_view == "TOP RUNNERS DASHBOARD":
 else:
     CURRENT_SCREEN_TIME = 5
 
-# Create a clean standalone container for rendering content
+# Create a clean canvas wrapper
 display_container = st.container()
 
 if adult_data.empty and youth_data.empty:
@@ -233,7 +233,6 @@ if adult_data.empty and youth_data.empty:
         st.info("Awaiting initial RFID reads...")
 else:
     if current_view != "TOP RUNNERS DASHBOARD":
-        # Standard List View rendering block
         with display_container:
             st.markdown(f"<h1>🏆 {current_view}</h1>", unsafe_allow_html=True)
             
@@ -264,21 +263,24 @@ else:
                 sliced_df = display_df.iloc[start_row:end_row]
                 st.table(sliced_df[cols_to_show].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
                 
+                # CRITICAL INTERRUPT: If chunk completes, rotate the state counter and instantly trigger a refresh
                 if end_row >= total_rows:
                     st.session_state.row_chunk = 0
                     st.session_state.view_index += 1
+                    time.sleep(CURRENT_SCREEN_TIME)
+                    st.rerun()
                 else:
                     st.session_state.row_chunk += 1
             else:
                 st.session_state.row_chunk = 0
                 st.session_state.view_index += 1
+                st.rerun()
 
     else:
-        # 5. Dashboard View Block (Strictly isolated from everything else)
+        # Dashboard View Block
         with display_container:
             podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
             
-            # Encapsulate entire structure in custom scaled HTML/CSS wrapper block
             st.markdown('<div class="dashboard-scaled">', unsafe_allow_html=True)
             
             dash_cols = st.columns(2)
@@ -298,7 +300,6 @@ else:
                 else:
                     st.write("No entries yet")
             
-            # Bottom centered Non-Binary block (only evaluates if records exist)
             top_x = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].head(5).copy()
             if not top_x.empty:
                 st.markdown("<br><h3 style='margin-bottom: 8px;'>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
@@ -308,9 +309,12 @@ else:
                 
             st.markdown('</div>', unsafe_allow_html=True)
             
+        # CRITICAL INTERRUPT: Dashboard holds static view for its screen time, updates state counter, and reruns
         st.session_state.row_chunk = 0
         st.session_state.view_index += 1
+        time.sleep(CURRENT_SCREEN_TIME)
+        st.rerun()
 
-# 6. Apply dynamic view delays
+# Fallback timer loop step
 time.sleep(CURRENT_SCREEN_TIME)
 st.rerun()
