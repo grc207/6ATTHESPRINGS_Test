@@ -123,33 +123,37 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def get_processed_data():
     for attempt in range(3):
         try:
+            # Load Roster
             roster = conn.read(worksheet="Runner Data", ttl="60s")
             roster.columns = roster.columns.str.strip()
             
+            # Ensure proper mapping hooks for Roster items
             roster['Bib'] = pd.to_numeric(roster['Bib'], errors='coerce').fillna(0).astype(int)
             roster['Name'] = roster['First Name'].astype(str) + " " + roster['Last Name'].astype(str)
             
+            # Load your raw reader log columns from Data Input
             reads = conn.read(worksheet="Data Input", ttl="60s")
             
             if reads.empty:
                 return pd.DataFrame(), pd.DataFrame()
             
-            # Re-map incoming columns: Col A -> Chip_ID, Col B -> Timestamp, Col C -> Bib
-            reads.columns = ['Chip_ID', 'Timestamp', 'Bib']
+            # Isolate the first 2 columns exclusively (Col A = Chip, Col B = Timestamp)
+            # This completely ignores your custom Column C / helper rows to prevent crashes
+            reads = reads.iloc[:, :2]
+            reads.columns = ['Bib', 'Timestamp']
             
-            # --- DATATYPE SAFETY ZONE ---
-            # If QUERY formatted it to datetime, convert it smoothly to standard string format
+            # --- DATATYPE SAFETY HOOKS ---
+            # Re-convert any automated datetime cell blocks back to text strings dynamically
             if pd.api.types.is_datetime64_any_dtype(reads['Timestamp']):
                 reads['Timestamp'] = reads['Timestamp'].dt.strftime('%H:%M:%S')
             else:
-                # If it remains text strings, clean any remnants of hardware apostrophes cleanly
                 reads['Timestamp'] = reads['Timestamp'].astype(str).str.strip("'\" ")
             
             reads['Bib'] = pd.to_numeric(reads['Bib'], errors='coerce').fillna(0).astype(int)
 
             start_time = datetime.strptime("08:00:00", "%H:%M:%S")
             
-            # Aggregate cleanly using normalized type strings
+            # Core race aggregation loops
             stats = reads.groupby('Bib').agg(
                 Loop_Count=('Timestamp', 'count'),
                 Last_Read=('Timestamp', 'max')
