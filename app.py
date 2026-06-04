@@ -134,16 +134,22 @@ def get_processed_data():
             if reads.empty:
                 return pd.DataFrame(), pd.DataFrame()
             
-            # Re-map incoming hardware columns: Col A -> Chip_ID, Col B -> Timestamp, Col C -> Bib
+            # Re-map incoming columns: Col A -> Chip_ID, Col B -> Timestamp, Col C -> Bib
             reads.columns = ['Chip_ID', 'Timestamp', 'Bib']
             
-            # Clean and isolate the raw text strings from any hardware apostrophe formatting
-            reads['Timestamp'] = reads['Timestamp'].astype(str).str.strip("'\" ")
+            # --- DATATYPE SAFETY ZONE ---
+            # If QUERY formatted it to datetime, convert it smoothly to standard string format
+            if pd.api.types.is_datetime64_any_dtype(reads['Timestamp']):
+                reads['Timestamp'] = reads['Timestamp'].dt.strftime('%H:%M:%S')
+            else:
+                # If it remains text strings, clean any remnants of hardware apostrophes cleanly
+                reads['Timestamp'] = reads['Timestamp'].astype(str).str.strip("'\" ")
+            
             reads['Bib'] = pd.to_numeric(reads['Bib'], errors='coerce').fillna(0).astype(int)
 
             start_time = datetime.strptime("08:00:00", "%H:%M:%S")
             
-            # Aggregate based on your newly normalized column mappings
+            # Aggregate cleanly using normalized type strings
             stats = reads.groupby('Bib').agg(
                 Loop_Count=('Timestamp', 'count'),
                 Last_Read=('Timestamp', 'max')
@@ -244,4 +250,74 @@ else:
             
             if current_view == "OVERALL 6-HOUR":
                 display_df = adult_data.copy()
-                cols_to_show
+                cols_to_show = ['Position', 'Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
+                
+            elif current_view == "FEMALE 6-HOUR":
+                display_df = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].copy()
+                cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
+                
+            elif current_view == "MALE 6-HOUR":
+                display_df = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].copy()
+                cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
+                
+            elif current_view == "YOUTH DIVISION":
+                display_df = youth_data.copy()
+                cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
+                
+            total_rows = len(display_df)
+            if total_rows > 0:
+                start_row = st.session_state.row_chunk * ROWS_PER_SCREEN
+                end_row = start_row + ROWS_PER_SCREEN
+                
+                sliced_df = display_df.iloc[start_row:end_row]
+                st.table(sliced_df[cols_to_show].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+                
+                if end_row >= total_rows:
+                    st.session_state.row_chunk = 0
+                    st.session_state.view_index += 1
+                else:
+                    st.session_state.row_chunk += 1
+            else:
+                st.session_state.row_chunk = 0
+                st.session_state.view_index += 1
+
+        else:
+            # --- CLEAN FIXED 2-COLUMN DASHBOARD PATH ---
+            podium_cols = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
+            
+            st.markdown('<div class="dashboard-scaled">', unsafe_allow_html=True)
+            
+            dash_cols = st.columns(2)
+            
+            # Left Column content (Men, then Non-Binary right underneath)
+            with dash_cols[0]:
+                st.markdown("<h3>🏃‍♂️ Top 5 Men</h3>", unsafe_allow_html=True)
+                top_m = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].head(5).copy()
+                if not top_m.empty:
+                    st.table(top_m[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+                else:
+                    st.write("No entries yet")
+                
+                top_x = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].head(5).copy()
+                if not top_x.empty:
+                    st.markdown("<br><br>", unsafe_allow_html=True)
+                    st.markdown("<h3>👟 Top Non-Binary</h3>", unsafe_allow_html=True)
+                    st.table(top_x[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+            
+            # Right Column content (Women)
+            with dash_cols[1]:
+                st.markdown("<h3>🏃‍♀️ Top 5 Women</h3>", unsafe_allow_html=True)
+                top_f = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].head(5).copy()
+                if not top_f.empty:
+                    st.table(top_f[podium_cols].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
+                else:
+                    st.write("No entries yet")
+                
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.session_state.row_chunk = 0
+            st.session_state.view_index += 1
+
+# 7. Transition management loop rerun
+time.sleep(CURRENT_SCREEN_TIME)
+st.rerun()
