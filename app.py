@@ -136,29 +136,29 @@ def get_processed_data():
             if reads.empty:
                 return pd.DataFrame(), pd.DataFrame()
             
-            # Dynamically handle whatever column layout is present on Data Input
-            # Force strip down to exactly the first 3 columns to ignore trailing sheet cells
+            # Slice down to exactly columns A, B, and C
             reads = reads.iloc[:, :3]
             reads.columns = ['Chip_ID', 'Timestamp', 'Bib']
             
-            # --- DATATYPE SAFETY HOOKS ---
+            # Clean timestamp string formats safely
             if pd.api.types.is_datetime64_any_dtype(reads['Timestamp']):
                 reads['Timestamp'] = reads['Timestamp'].dt.strftime('%H:%M:%S')
             else:
                 reads['Timestamp'] = reads['Timestamp'].astype(str).str.strip("'\" ")
             
-            # Convert Column C (Bib) to integers so it matches the roster perfectly
+            # Convert visual helper Bib column cleanly to numbers
             reads['Bib'] = pd.to_numeric(reads['Bib'], errors='coerce').fillna(0).astype(int)
 
-            # Drop any zero/empty bib anomalies from processing
+            # Silently drop uncalculated or empty helper rows without short-circuiting the script execution
             reads = reads[reads['Bib'] > 0]
 
-            if reads.empty:
+            # Re-check true dataset depth before continuing to aggregation steps
+            if len(reads) == 0:
                 return pd.DataFrame(), pd.DataFrame()
 
             start_time = datetime.strptime("08:00:00", "%H:%M:%S")
             
-            # Group by our explicitly mapped Bib column
+            # Group rows by numeric Bib values
             stats = reads.groupby('Bib').agg(
                 Loop_Count=('Timestamp', 'count'),
                 Last_Read=('Timestamp', 'max')
