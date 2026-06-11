@@ -132,4 +132,28 @@ def get_processed_data():
     return pd.DataFrame()
 
 # 3. Pull Data
-master_data = get_
+master_data = get_processed_data()
+
+# 4. UI Title Layout
+st.markdown("<h1>🏃‍♂️ RFID TEST LEADERBOARD - OVERALL</h1>", unsafe_allow_html=True)
+
+# 5. Core View Engine (No Pagination)
+if master_data.empty:
+    st.info("Awaiting initial RFID reads...")
+else:
+    # Append overall sequential placing
+    master_data['Rank'] = range(1, len(master_data) + 1)
+    
+    # Isolate only required columns for displaying
+    cols_to_show = ['Rank', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time', 'distance']
+    display_df = master_data[cols_to_show].rename(columns={'Loop_Count': 'Loops', 'distance': 'Division'})
+    
+    # Render Leaderboard Grid in full
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    # Simple summary row count
+    st.caption(f"Total test entries tracked: {len(display_df)}")
