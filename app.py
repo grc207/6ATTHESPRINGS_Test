@@ -23,15 +23,12 @@ if found_image:
     try:
         with open(found_image, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
-            # Changed RGBA alpha from 0.94 (very light) to 0.70 (noticeably darker)
-            # This makes the background image slightly darker to improve table legibility.
-            bg_image_css = f"background-image: linear-gradient(rgba(0, 0, 0, 0.70), rgba(0, 0, 0, 0.70)), url(data:image/png;base64,{encoded_string});"
+            # Adjusted to 0.88 - allows the logo to show through clearly while keeping the screen bright
+            bg_image_css = f"background-image: linear-gradient(rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.88)), url(data:image/png;base64,{encoded_string});"
     except Exception:
-        # Changed fallback to a noticeably darker grey to maintain the theme if the logo fails to load.
-        bg_image_css = "background-color: #333333;"
+        bg_image_css = "background-color: #f5f5f5;"
 else:
-    # Changed fallback to a noticeably darker grey if no logo is found.
-    bg_image_css = "background-color: #333333;"
+    bg_image_css = "background-color: #f5f5f5;"
 
 st.markdown(
     f"""
@@ -55,8 +52,7 @@ st.markdown(
         margin-bottom: 12px !important;
         text-align: center !important;
         font-weight: bold !important;
-        # Changed title text color to light grey for contrast against the darker background.
-        color: #f1f1f1 !important;
+        color: #111111 !important;
     }}
     
     /* Shrunk Global Transparent Table Layout to prevent vertical scrolling */
@@ -68,21 +64,19 @@ st.markdown(
     }}
     th {{
         background-color: transparent !important;
-        # Changed header text color to white for contrast against the darker background.
-        color: #ffffff !important;
+        color: #222222 !important;
         font-size: 19px !important;
         font-weight: bold !important;
         text-align: center !important;
-        padding: 2px 8px !important; /* Shrunk padding vertically */
-        border-bottom: 2px solid #f1f1f1 !important; /* Changed border to light grey for visibility */
+        padding: 2px 8px !important; 
+        border-bottom: 2px solid #444444 !important;
     }}
     td {{
-        padding: 2px 8px !important; /* Shrunk padding vertically */
+        padding: 2px 8px !important; 
         font-weight: 500 !important;
         text-align: center !important;
-        # Changed cell text color to off-white for contrast against the darker background.
-        color: #e0e0e0 !important;
-        border-bottom: 1px solid #444444 !important; /* Changed border to a darker grey to define rows without stark contrast */
+        color: #222222 !important;
+        border-bottom: 1px solid #e0e0e0 !important;
     }}
     </style>
     """,
@@ -164,28 +158,3 @@ def get_processed_data():
     return pd.DataFrame()
 
 # 3. Pull Data
-master_data = get_processed_data()
-
-# 4. UI Title Layout
-st.markdown("<h1>🏃‍♂️ RFID TEST LEADERBOARD - OVERALL</h1>", unsafe_allow_html=True)
-
-# 5. Transparent Table Engine (With 15-Line Limit Slicing)
-if master_data.empty:
-    st.info("Awaiting initial RFID reads...")
-else:
-    # Append overall sequential placing based on the entire field
-    master_data['Rank'] = range(1, len(master_data) + 1)
-    
-    # Isolate only required columns for displaying
-    cols_to_show = ['Rank', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time', 'distance']
-    display_df = master_data[cols_to_show].rename(columns={'Loop_Count': 'Loops', 'distance': 'Division'})
-    
-    # Slice the data to strictly show only the top 15 entries
-    limited_display_df = display_df.head(15)
-    
-    # Render transparent grid using st.table
-    st.table(limited_display_df, hide_index=True)
-    
-    # Simple summary row count showing total field size vs displayed count
-    # Added CSS to st.caption to change text color to light grey for contrast against the darker background.
-    st.markdown(f"<p style='color: #cccccc; font-size: 14px; text-align: left;'>Displaying top {len(limited_display_df)} runners out of {len(display_df)} total test entries tracked.</p>", unsafe_allow_html=True)
