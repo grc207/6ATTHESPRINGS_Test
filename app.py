@@ -23,19 +23,19 @@ if found_image:
     try:
         with open(found_image, "rb") as image_file:
             encoded_string = base64.b64encode(image_file.read()).decode()
-            # Adjusted to 0.88 - allows the logo to show through clearly while keeping the screen bright
-            bg_image_css = f"background-image: linear-gradient(rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.88)), url(data:image/png;base64,{encoded_string});"
+            # RESTORED: Back to your exact original light layout transparency engine
+            bg_image_css = f"background-image: linear-gradient(rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.94)), url(data:image/png;base64,{encoded_string});"
     except Exception:
-        bg_image_css = "background-color: #f5f5f5;"
+        bg_image_css = "background-color: #f9f9f9;"
 else:
-    bg_image_css = "background-color: #f5f5f5;"
+    bg_image_css = "background-color: #f9f9f9;"
 
 st.markdown(
     f"""
     <style>
     .block-container {{
-        padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
+        padding-top: 2rem !important;
+        padding-bottom: 2rem !important;
     }}
     
     .stApp {{
@@ -47,32 +47,32 @@ st.markdown(
     }}
     
     h1 {{
-        font-size: 26px !important;
+        font-size: 30px !important;
         margin-top: 0px !important;
-        margin-bottom: 12px !important;
+        margin-bottom: 20px !important;
         text-align: center !important;
         font-weight: bold !important;
         color: #111111 !important;
     }}
     
-    /* Shrunk Global Transparent Table Layout to prevent vertical scrolling */
+    /* RESTORED: Original crisp, transparent table styling rules */
     table {{
         width: 100% !important;
-        font-size: 18px !important;
+        font-size: 22px !important;
         background-color: transparent !important;
         border-collapse: collapse !important;
     }}
     th {{
         background-color: transparent !important;
         color: #222222 !important;
-        font-size: 19px !important;
+        font-size: 24px !important;
         font-weight: bold !important;
         text-align: center !important;
-        padding: 2px 8px !important; 
+        padding: 8px !important;
         border-bottom: 2px solid #444444 !important;
     }}
     td {{
-        padding: 2px 8px !important; 
+        padding: 8px !important;
         font-weight: 500 !important;
         text-align: center !important;
         color: #222222 !important;
@@ -116,7 +116,7 @@ def get_processed_data():
             if len(reads) == 0:
                 return pd.DataFrame()
 
-            # --- ADJUSTED FOR 7:00 AM START TIME ---
+            # LOCKED IN: 7:00 AM Race Start Time
             start_time = datetime.strptime("07:00:00", "%H:%M:%S")
             
             stats = reads.groupby('Bib').agg(
@@ -158,3 +158,27 @@ def get_processed_data():
     return pd.DataFrame()
 
 # 3. Pull Data
+master_data = get_processed_data()
+
+# 4. UI Title Layout
+st.markdown("<h1>🏃‍♂️ RFID TEST LEADERBOARD - OVERALL</h1>", unsafe_allow_html=True)
+
+# 5. Transparent Table Engine (With 15-Line Limit Slicing)
+if master_data.empty:
+    st.info("Awaiting initial RFID reads...")
+else:
+    # Append overall sequential placing based on the entire field
+    master_data['Rank'] = range(1, len(master_data) + 1)
+    
+    # Isolate only required columns for displaying
+    cols_to_show = ['Rank', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time', 'distance']
+    display_df = master_data[cols_to_show].rename(columns={'Loop_Count': 'Loops', 'distance': 'Division'})
+    
+    # LOCKED IN: Cap the view strictly to the top 15 rows
+    limited_display_df = display_df.head(15)
+    
+    # Render using st.table for complete background logo transparency
+    st.table(limited_display_df, hide_index=True)
+    
+    # Simple summary row count showing total field size vs displayed count
+    st.caption(f"Displaying top {len(limited_display_df)} runners out of {len(display_df)} total test entries tracked.")
