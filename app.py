@@ -33,8 +33,8 @@ st.markdown(
     f"""
     <style>
     .block-container {{
-        padding-top: 2rem !important;
-        padding-bottom: 2rem !important;
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
     }}
     
     .stApp {{
@@ -46,32 +46,32 @@ st.markdown(
     }}
     
     h1 {{
-        font-size: 30px !important;
+        font-size: 26px !important;
         margin-top: 0px !important;
-        margin-bottom: 20px !important;
+        margin-bottom: 12px !important;
         text-align: center !important;
         font-weight: bold !important;
         color: #111111 !important;
     }}
     
-    /* Global Transparent Table Styling matching original layout specs */
+    /* Shrunk Global Transparent Table Layout to prevent vertical scrolling */
     table {{
         width: 100% !important;
-        font-size: 22px !important;
+        font-size: 18px !important;
         background-color: transparent !important;
         border-collapse: collapse !important;
     }}
     th {{
         background-color: transparent !important;
         color: #222222 !important;
-        font-size: 24px !important;
+        font-size: 19px !important;
         font-weight: bold !important;
         text-align: center !important;
-        padding: 8px !important;
+        padding: 2px 8px !important; /* Shrunk padding vertically */
         border-bottom: 2px solid #444444 !important;
     }}
     td {{
-        padding: 8px !important;
+        padding: 2px 8px !important; /* Shrunk padding vertically */
         font-weight: 500 !important;
         text-align: center !important;
         border-bottom: 1px solid #e0e0e0 !important;
@@ -114,7 +114,8 @@ def get_processed_data():
             if len(reads) == 0:
                 return pd.DataFrame()
 
-            start_time = datetime.strptime("08:00:00", "%H:%M:%S")
+            # --- ADJUSTED FOR 7:00 AM START TIME ---
+            start_time = datetime.strptime("07:00:00", "%H:%M:%S")
             
             stats = reads.groupby('Bib').agg(
                 Loop_Count=('Timestamp', 'count'),
