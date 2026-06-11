@@ -5,9 +5,10 @@ import time
 from datetime import datetime
 import base64
 import os
+import math
 
 # 1. Page Configuration
-st.set_page_config(page_title="RACER LOOKUP", layout="wide")
+st.set_page_config(page_title="RFID TEST LEADERBOARD", layout="wide")
 
 # --- SECURE BACKGROUND LOGO ENGINE ---
 bg_image_css = ""
@@ -54,26 +55,10 @@ st.markdown(
         color: #111111 !important;
     }}
     
-    table {{
-        width: 100% !important;
-        font-size: 22px !important;
-        background-color: transparent !important;
-        border-collapse: collapse !important;
-    }}
-    th {{
-        background-color: transparent !important;
-        color: #222222 !important;
-        font-size: 24px !important;
-        font-weight: bold !important;
-        text-align: center !important;
-        padding: 8px !important;
-        border-bottom: 2px solid #444444 !important;
-    }}
-    td {{
-        padding: 8px !important;
-        font-weight: 500 !important;
-        text-align: center !important;
-        border-bottom: 1px solid #e0e0e0 !important;
+    /* Center styling for pagination inputs */
+    .stNumberInput {{
+        max-width: 200px !important;
+        margin: 0 auto !important;
     }}
     </style>
     """,
@@ -87,7 +72,7 @@ def get_processed_data():
     for attempt in range(3):
         try:
             # Load Roster
-            roster = conn.read(worksheet="Runner Data", ttl="10s")  # Lower TTL for interactive lookup snappiness
+            roster = conn.read(worksheet="Runner Data", ttl="10s")
             roster.columns = roster.columns.str.strip()
             
             roster['Bib'] = pd.to_numeric(roster['Bib'], errors='coerce').fillna(0).astype(int)
@@ -97,7 +82,7 @@ def get_processed_data():
             reads = conn.read(worksheet="Data Input", ttl="10s")
             
             if reads.empty:
-                return pd.DataFrame(), pd.DataFrame()
+                return pd.DataFrame()
             
             reads = reads.iloc[:, :3]
             reads.columns = ['Chip_ID', 'Timestamp', 'Bib']
@@ -111,7 +96,7 @@ def get_processed_data():
             reads = reads[reads['Bib'] > 0]
 
             if len(reads) == 0:
-                return pd.DataFrame(), pd.DataFrame()
+                return pd.DataFrame()
 
             start_time = datetime.strptime("08:00:00", "%H:%M:%S")
             
@@ -138,16 +123,10 @@ def get_processed_data():
                     
             df['Overall Time'] = df['Last_Read'].apply(calc_elapsed)
             
-            df['distance'] = df['distance'].astype(str).str.strip()
-            youth_mask = df['distance'].str.contains("Youth", case=False, na=False)
+            # Sort everything globally by performance criteria
+            df = df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
             
-            adult_df = df[~youth_mask & df['distance'].str.contains("6HR", case=False, na=False)].copy()
-            youth_df = df[youth_mask].copy()
-            
-            adult_df = adult_df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
-            youth_df = youth_df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
-            
-            return adult_df, youth_df
+            return df
 
         except Exception as e:
             if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
@@ -155,76 +134,54 @@ def get_processed_data():
                 continue
             else:
                 st.error(f"Error processing live data: {e}")
-                return pd.DataFrame(), pd.DataFrame()
+                return pd.DataFrame()
                 
-    return pd.DataFrame(), pd.DataFrame()
+    return pd.DataFrame()
 
-# 3. Pull and Master-Rank Data
-adult_data, youth_data = get_processed_data()
+# 3. Pull Data
+master_data = get_processed_data()
 
-if not adult_data.empty:
-    adult_data['Position'] = [i+1 for i in range(len(adult_data))]
-    adult_data['Class Place'] = ""
-    m_count, f_count, x_count = 1, 1, 1
-    for idx, row in adult_data.iterrows():
-        gen_val = str(row['gender']).upper().strip()
-        if gen_val == 'M':
-            adult_data.at[idx, 'Class Place'] = f"M{m_count}"
-            m_count += 1
-        elif gen_val == 'F':
-            adult_data.at[idx, 'Class Place'] = f"F{f_count}"
-            f_count += 1
-        elif gen_val == 'X':
-            adult_data.at[idx, 'Class Place'] = f"X{x_count}"
-            x_count += 1
+# 4. UI Title Layout
+st.markdown("<h1>🏃‍♂️ RFID TEST LEADERBOARD - OVERALL</h1>", unsafe_allow_html=True)
 
-if not youth_data.empty:
-    youth_data['Class Place'] = [f"Y{i+1}" for i in range(len(youth_data))]
-
-# 4. Interactive Search UI Components
-st.markdown("<h1>🔍 COMPETITOR RESULTS LOOKUP</h1>", unsafe_allow_html=True)
-
-# UI Inputs side-by-side or stacked cleanly
-search_query = st.text_input("Search by Name or Bib Number:", value="", placeholder="e.g. Bob or 142").strip()
-
-category = st.radio(
-    "Filter Division:",
-    options=["Overall (Adults)", "Male", "Female", "Non-Binary", "Youth"],
-    horizontal=True
-)
-
-# 5. Core Filtering Logic
-if adult_data.empty and youth_data.empty:
+# 5. Core View and Pagination Engine
+if master_data.empty:
     st.info("Awaiting initial RFID reads...")
 else:
-    # Segment data based on selected category radio button
-    if category == "Youth":
-        display_df = youth_data.copy()
-        cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
-    else:
-        # Base filter handles excluding youth out of overall paths
-        if category == "Overall (Adults)":
-            display_df = adult_data.copy()
-            cols_to_show = ['Position', 'Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
-        elif category == "Male":
-            display_df = adult_data[adult_data['gender'].str.upper().str.strip() == 'M'].copy()
-            cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
-        elif category == "Female":
-            display_df = adult_data[adult_data['gender'].str.upper().str.strip() == 'F'].copy()
-            cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
-        elif category == "Non-Binary":
-            display_df = adult_data[adult_data['gender'].str.upper().str.strip() == 'X'].copy()
-            cols_to_show = ['Class Place', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time']
-
-    # Apply text filter if query exists
-    if search_query:
-        # Check both name match and partial/exact bib conversions
-        name_match = display_df['Name'].str.contains(search_query, case=False, na=False)
-        bib_match = display_df['Bib'].astype(str).str.contains(search_query, na=False)
-        display_df = display_df[name_match | bib_match]
-
-    # Render results
-    if not display_df.empty:
-        st.table(display_df[cols_to_show].rename(columns={'Loop_Count': 'Loops'}), hide_index=True)
-    else:
-        st.warning("No runners found matching your selection criteria.")
+    # Append overall sequential placing
+    master_data['Rank'] = range(1, len(master_data) + 1)
+    
+    # Isolate only required columns for displaying
+    cols_to_show = ['Rank', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time', 'distance']
+    display_df = master_data[cols_to_show].rename(columns={'Loop_Count': 'Loops', 'distance': 'Division'})
+    
+    # Pagination math parameters
+    total_runners = len(display_df)
+    runners_per_page = 15
+    total_pages = math.ceil(total_runners / runners_per_page)
+    
+    # Inline centered control elements
+    col1, col2, col3 = st.columns([2, 1, 2])
+    with col2:
+        page_number = st.number_input(
+            f"Page (1 of {total_pages})", 
+            min_value=1, 
+            max_value=total_pages, 
+            value=1, 
+            step=1
+        )
+        
+    # Calculate slice ranges
+    start_idx = (page_number - 1) * runners_per_page
+    end_idx = start_idx + runners_per_page
+    paged_df = display_df.iloc[start_idx:end_idx]
+    
+    # Render Leaderboard Grid
+    st.dataframe(
+        paged_df,
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    # Metrics display line
+    st.caption(f"Displaying runner indices {start_idx + 1} to {min(end_idx, total_runners)} out of {total_runners} active test entries.")
