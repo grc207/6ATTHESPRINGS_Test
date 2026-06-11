@@ -5,7 +5,6 @@ import time
 from datetime import datetime
 import base64
 import os
-import math
 
 # 1. Page Configuration
 st.set_page_config(page_title="RFID TEST LEADERBOARD", layout="wide")
@@ -53,12 +52,6 @@ st.markdown(
         text-align: center !important;
         font-weight: bold !important;
         color: #111111 !important;
-    }}
-    
-    /* Center styling for pagination inputs */
-    .stNumberInput {{
-        max-width: 200px !important;
-        margin: 0 auto !important;
     }}
     </style>
     """,
@@ -139,49 +132,4 @@ def get_processed_data():
     return pd.DataFrame()
 
 # 3. Pull Data
-master_data = get_processed_data()
-
-# 4. UI Title Layout
-st.markdown("<h1>🏃‍♂️ RFID TEST LEADERBOARD - OVERALL</h1>", unsafe_allow_html=True)
-
-# 5. Core View and Pagination Engine
-if master_data.empty:
-    st.info("Awaiting initial RFID reads...")
-else:
-    # Append overall sequential placing
-    master_data['Rank'] = range(1, len(master_data) + 1)
-    
-    # Isolate only required columns for displaying
-    cols_to_show = ['Rank', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time', 'distance']
-    display_df = master_data[cols_to_show].rename(columns={'Loop_Count': 'Loops', 'distance': 'Division'})
-    
-    # Pagination math parameters
-    total_runners = len(display_df)
-    runners_per_page = 15
-    total_pages = math.ceil(total_runners / runners_per_page)
-    
-    # Inline centered control elements
-    col1, col2, col3 = st.columns([2, 1, 2])
-    with col2:
-        page_number = st.number_input(
-            f"Page (1 of {total_pages})", 
-            min_value=1, 
-            max_value=total_pages, 
-            value=1, 
-            step=1
-        )
-        
-    # Calculate slice ranges
-    start_idx = (page_number - 1) * runners_per_page
-    end_idx = start_idx + runners_per_page
-    paged_df = display_df.iloc[start_idx:end_idx]
-    
-    # Render Leaderboard Grid
-    st.dataframe(
-        paged_df,
-        use_container_width=True,
-        hide_index=True
-    )
-    
-    # Metrics display line
-    st.caption(f"Displaying runner indices {start_idx + 1} to {min(end_idx, total_runners)} out of {total_runners} active test entries.")
+master_data = get_
