@@ -53,6 +53,29 @@ st.markdown(
         font-weight: bold !important;
         color: #111111 !important;
     }}
+    
+    /* Global Transparent Table Styling matching original layout specs */
+    table {{
+        width: 100% !important;
+        font-size: 22px !important;
+        background-color: transparent !important;
+        border-collapse: collapse !important;
+    }}
+    th {{
+        background-color: transparent !important;
+        color: #222222 !important;
+        font-size: 24px !important;
+        font-weight: bold !important;
+        text-align: center !important;
+        padding: 8px !important;
+        border-bottom: 2px solid #444444 !important;
+    }}
+    td {{
+        padding: 8px !important;
+        font-weight: 500 !important;
+        text-align: center !important;
+        border-bottom: 1px solid #e0e0e0 !important;
+    }}
     </style>
     """,
     unsafe_allow_html=True
@@ -114,47 +137,4 @@ def get_processed_data():
                 except Exception:
                     return "00:00:00"
                     
-            df['Overall Time'] = df['Last_Read'].apply(calc_elapsed)
-            
-            # Sort everything globally by performance criteria
-            df = df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
-            
-            return df
-
-        except Exception as e:
-            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
-                time.sleep(1)
-                continue
-            else:
-                st.error(f"Error processing live data: {e}")
-                return pd.DataFrame()
-                
-    return pd.DataFrame()
-
-# 3. Pull Data (Crucial step to define master_data before it's used!)
-master_data = get_processed_data()
-
-# 4. UI Title Layout
-st.markdown("<h1>🏃‍♂️ RFID TEST LEADERBOARD - OVERALL</h1>", unsafe_allow_html=True)
-
-# 5. Core View Engine (No Pagination, Fixed Height for 15+ Rows)
-if master_data.empty:
-    st.info("Awaiting initial RFID reads...")
-else:
-    # Append overall sequential placing
-    master_data['Rank'] = range(1, len(master_data) + 1)
-    
-    # Isolate only required columns for displaying
-    cols_to_show = ['Rank', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time', 'distance']
-    display_df = master_data[cols_to_show].rename(columns={'Loop_Count': 'Loops', 'distance': 'Division'})
-    
-    # Render Leaderboard Grid in full with custom height
-    st.dataframe(
-        display_df,
-        use_container_width=True,
-        hide_index=True,
-        height=575  # Forces the view open to fit 15 runners without internal scrollbars
-    )
-    
-    # Simple summary row count
-    st.caption(f"Total test entries tracked: {len(display_df)}")
+            df['Overall Time'] =
