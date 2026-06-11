@@ -160,19 +160,22 @@ master_data = get_processed_data()
 # 4. UI Title Layout
 st.markdown("<h1>🏃‍♂️ RFID TEST LEADERBOARD - OVERALL</h1>", unsafe_allow_html=True)
 
-# 5. Transparent Table Engine (Restores Background Logo Visibility)
+# 5. Transparent Table Engine (With 15-Line Limit Slicing)
 if master_data.empty:
     st.info("Awaiting initial RFID reads...")
 else:
-    # Append overall sequential placing
+    # Append overall sequential placing based on the entire field
     master_data['Rank'] = range(1, len(master_data) + 1)
     
     # Isolate only required columns for displaying
     cols_to_show = ['Rank', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time', 'distance']
     display_df = master_data[cols_to_show].rename(columns={'Loop_Count': 'Loops', 'distance': 'Division'})
     
-    # Render transparent grid using st.table
-    st.table(display_df, hide_index=True)
+    # Slice the data to strictly show only the top 15 entries
+    limited_display_df = display_df.head(15)
     
-    # Simple summary row count
-    st.caption(f"Total test entries tracked: {len(display_df)}")
+    # Render transparent grid using st.table
+    st.table(limited_display_df, hide_index=True)
+    
+    # Simple summary row count showing total field size vs displayed count
+    st.caption(f"Displaying top {len(limited_display_df)} runners out of {len(display_df)} total test entries tracked.")
