@@ -46,7 +46,7 @@ st.markdown(
     }}
     
     h1 {{
-        font-size: 26px !important; /* Shrunk title size slightly */
+        font-size: 26px !important;
         margin-top: 0px !important;
         margin-bottom: 12px !important;
         text-align: center !important;
@@ -54,24 +54,23 @@ st.markdown(
         color: #111111 !important;
     }}
     
-    /* Shrunk Global Transparent Table Layout to prevent vertical scrolling */
     table {{
         width: 100% !important;
-        font-size: 18px !important; /* Shrunk text from 22px */
+        font-size: 18px !important;
         background-color: transparent !important;
         border-collapse: collapse !important;
     }}
     th {{
         background-color: transparent !important;
         color: #222222 !important;
-        font-size: 19px !important; /* Shrunk headers from 24px */
+        font-size: 19px !important;
         font-weight: bold !important;
         text-align: center !important;
-        padding: 2px 8px !important; /* Shrunk vertical padding from 8px to 2px */
+        padding: 2px 8px !important; 
         border-bottom: 2px solid #444444 !important;
     }}
     td {{
-        padding: 2px 8px !important; /* Shrunk vertical padding from 8px to 2px */
+        padding: 2px 8px !important; 
         font-weight: 500 !important;
         text-align: center !important;
         color: #222222 !important;
@@ -82,10 +81,26 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 2. Data Connection
+# 2. Data Connection and Lock Checking Logic
 conn = st.connection("gsheets", type=GSheetsConnection)
+LOCAL_BACKUP_FILE = "final_leaderboard.csv"
+
+def is_past_lock_time():
+    """Checks if the current system time is past 10:00 AM on Saturday."""
+    now = datetime.now()
+    # Lock target: 10:00:00 AM
+    lock_time = now.replace(hour=10, minute=0, second=0, microsecond=0)
+    return now >= lock_time
 
 def get_processed_data():
+    # 1. FAILSAFE CHECK: If it is past 10 AM and our permanent local backup exists, read that instantly
+    if is_past_lock_time() and os.path.exists(LOCAL_BACKUP_FILE):
+        try:
+            return pd.read_csv(LOCAL_BACKUP_FILE)
+        except Exception:
+            pass # Fallback to live pull if local file reading fails inexplicably
+
+    # 2. LIVE FETCH PATTERNS (Before 10:00 AM)
     for attempt in range(3):
         try:
             # Load Roster
@@ -144,6 +159,10 @@ def get_processed_data():
             # Sort everything globally by performance criteria
             df = df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
             
+            # 3. AUTO-SAVE BACKUP AT 10:00 AM: If we hit 10 AM, write this final dataset to local disk immediately
+            if is_past_lock_time() and not os.path.exists(LOCAL_BACKUP_FILE):
+                df.to_csv(LOCAL_BACKUP_FILE, index=False)
+            
             return df
 
         except Exception as e:
@@ -160,9 +179,12 @@ def get_processed_data():
 master_data = get_processed_data()
 
 # 4. UI Title Layout
-st.markdown("<h1>🏃‍♂️ RFID TEST LEADERBOARD - OVERALL</h1>", unsafe_allow_html=True)
+if is_past_lock_time():
+    st.markdown("<h1>🔒 RFID TEST LEADERBOARD - FINAL RESULTS (LOCKED)</h1>", unsafe_allow_html=True)
+else:
+    st.markdown("<h1>🏃‍♂️ RFID TEST LEADERBOARD - OVERALL (LIVE)</h1>", unsafe_allow_html=True)
 
-# 5. Transparent Table Engine (With 15-Line Limit Slicing & Shrunk Padding)
+# 5. Transparent Table Engine (With 15-Line Limit Slicing)
 if master_data.empty:
     st.info("Awaiting initial RFID reads...")
 else:
@@ -171,13 +193,23 @@ else:
     
     # Isolate only required columns for displaying
     cols_to_show = ['Rank', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time', 'distance']
-    display_df = master_data[cols_to_show].rename(columns={'Loop_Count': 'Loops', 'distance': 'Division'})
     
-    # LOCKED IN: Cap the view strictly to the top 15 rows
+    # Check if 'distance' column needs renaming (it's called 'distance' when live, or preserved in CSV raw schema)
+    if 'distance' in master_data.columns:
+        display_df = master_data[cols_to_show].rename(columns={'Loop_Count': 'Loops', 'distance': 'Division'})
+    else:
+        # Compatibility handling if reading a post-processed data frame structure
+        cols_to_show_backup = ['Rank', 'Bib', 'Name', 'Loops', 'Mileage', 'Overall Time', 'Division']
+        display_df = master_data[cols_to_show_backup]
+    
+    # Cap the view strictly to the top 15 rows
     limited_display_df = display_df.head(15)
     
     # Render using st.table for complete background logo transparency
     st.table(limited_display_df, hide_index=True)
     
-    # Simple summary row count showing total field size vs displayed count
-    st.caption(f"Displaying top {len(limited_display_df)} runners out of {len(display_df)} total test entries tracked.")
+    # Summary notification lines showing status context
+    if is_past_lock_time():
+        st.caption(f"Results are locked. Displaying frozen final standings of {len(display_df)} entries tracked at 10:00 AM.")
+    else:
+        st.caption(f"Displaying top {len(limited_display_df)} runners out of {len(display_df)} total test entries tracked.")
