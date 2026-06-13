@@ -47,7 +47,7 @@ st.markdown(
     
     h1 {{
         font-size: 26px !important;
-        margin-top: 0px !important;
+        margin-top: 20px !important; /* Pushes the header down away from the top edge so it isn't cut off */
         margin-bottom: 12px !important;
         text-align: center !important;
         font-weight: bold !important;
@@ -87,7 +87,6 @@ LOCAL_BACKUP_FILE = "final_leaderboard.csv"
 
 def is_past_lock_time():
     """Checks if the current Eastern Time is past 10:00 AM on Saturday, June 13, 2026."""
-    # Create a reliable UTC-4 offset for Eastern Daylight Time (EDT) natively
     edt_tz = timezone(timedelta(hours=-4))
     now_eastern = datetime.now(timezone.utc).astimezone(edt_tz)
     
@@ -97,7 +96,7 @@ def is_past_lock_time():
     return now_eastern >= lock_target
 
 def get_processed_data():
-    # 1. FAILSAFE CHECK: Read local frozen data frame if past lock time
+    # 1. FAILSAFE CHECK: Read local frozen dataframe if past lock time
     if is_past_lock_time() and os.path.exists(LOCAL_BACKUP_FILE):
         try:
             return pd.read_csv(LOCAL_BACKUP_FILE)
