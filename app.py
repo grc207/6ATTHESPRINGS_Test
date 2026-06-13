@@ -1,10 +1,7 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-import time
-from datetime import datetime, timedelta, timezone
-import base64
-import os
+from datetime import datetime
 
 # 1. Page Configuration
 st.set_page_config(page_title="RFID TEST LEADERBOARD", layout="wide")
@@ -47,7 +44,7 @@ st.markdown(
     
     h1 {{
         font-size: 26px !important;
-        margin-top: 20px !important; /* Pushes the header down away from the top edge so it isn't cut off */
+        margin-top: 20px !important;
         margin-bottom: 12px !important;
         text-align: center !important;
         font-weight: bold !important;
@@ -81,110 +78,91 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 2. Data Connection and Lock Checking Logic
+# 2. Data Connection
 conn = st.connection("gsheets", type=GSheetsConnection)
-LOCAL_BACKUP_FILE = "final_leaderboard.csv"
 
-def is_past_lock_time():
-    """Checks if the current Eastern Time is past 10:00 AM on Saturday, June 13, 2026."""
-    edt_tz = timezone(timedelta(hours=-4))
-    now_eastern = datetime.now(timezone.utc).astimezone(edt_tz)
-    
-    # HARD TARGET: Saturday, June 13, 2026 @ 10:00:00 AM EDT
-    lock_target = datetime(2026, 6, 13, 10, 0, 0, tzinfo=edt_tz)
-    
-    return now_eastern >= lock_target
+# Using cache_resource ensures this function executes EXACTLY ONCE when the app starts, 
+# freezing the data frame in memory forever until you modify the code or manually reboot the app server.
+@st.cache_resource
+def get_frozen_test_data():
+    try:
+        # Load Roster
+        roster = conn.read(worksheet="Runner Data")
+        roster.columns = roster.columns.str.strip()
+        
+        roster['Bib'] = pd.to_numeric(roster['Bib'], errors='coerce').fillna(0).astype(int)
+        roster['Name'] = roster['First Name'].astype(str) + " " + roster['Last Name'].astype(str)
+        
+        # Load Data Input Sheet
+        reads = conn.read(worksheet="Data Input")
+        if reads.empty:
+            return pd.DataFrame()
+        
+        reads = reads.iloc[:, :3]
+        reads.columns = ['Chip_ID', 'Timestamp', 'Bib']
+        
+        # Clean timestamps to standard string time formatting
+        if pd.api.types.is_datetime64_any_dtype(reads['Timestamp']):
+            reads['Timestamp'] = reads['Timestamp'].dt.strftime('%H:%M:%S')
+        else:
+            reads['Timestamp'] = reads['Timestamp'].astype(str).str.strip("'\" ")
+        
+        reads['Bib'] = pd.to_numeric(reads['Bib'], errors='coerce').fillna(0).astype(int)
+        reads = reads[reads['Bib'] > 0]
+        
+        # --- HARD LOCK: Filter data to ONLY include reads up to 10:00:00 AM today ---
+        reads = reads[reads['Timestamp'] <= "10:00:00"]
+        
+        if len(reads) == 0:
+            return pd.DataFrame()
 
-def get_processed_data():
-    # 1. FAILSAFE CHECK: Read local frozen dataframe if past lock time
-    if is_past_lock_time() and os.path.exists(LOCAL_BACKUP_FILE):
-        try:
-            return pd.read_csv(LOCAL_BACKUP_FILE)
-        except Exception:
-            pass
-
-    # 2. LIVE FETCH PATTERNS
-    for attempt in range(3):
-        try:
-            roster = conn.read(worksheet="Runner Data", ttl="10s")
-            roster.columns = roster.columns.str.strip()
-            
-            roster['Bib'] = pd.to_numeric(roster['Bib'], errors='coerce').fillna(0).astype(int)
-            roster['Name'] = roster['First Name'].astype(str) + " " + roster['Last Name'].astype(str)
-            
-            reads = conn.read(worksheet="Data Input", ttl="10s")
-            if reads.empty:
-                return pd.DataFrame()
-            
-            reads = reads.iloc[:, :3]
-            reads.columns = ['Chip_ID', 'Timestamp', 'Bib']
-            
-            if pd.api.types.is_datetime64_any_dtype(reads['Timestamp']):
-                reads['Timestamp'] = reads['Timestamp'].dt.strftime('%H:%M:%S')
-            else:
-                reads['Timestamp'] = reads['Timestamp'].astype(str).str.strip("'\" ")
-            
-            reads['Bib'] = pd.to_numeric(reads['Bib'], errors='coerce').fillna(0).astype(int)
-            reads = reads[reads['Bib'] > 0]
-
-            if len(reads) == 0:
-                return pd.DataFrame()
-
-            # LOCKED IN: 7:00 AM Race Start Time
-            start_time = datetime.strptime("07:00:00", "%H:%M:%S")
-            
-            stats = reads.groupby('Bib').agg(
-                Loop_Count=('Timestamp', 'count'),
-                Last_Read=('Timestamp', 'max')
-            ).reset_index()
-            
-            df = pd.merge(roster, stats, on='Bib', how='inner')
-            df['Mileage'] = df['Loop_Count'] * 4
-            
-            def calc_elapsed(ts_str):
-                try:
-                    clean_ts = str(ts_str).strip("'\" ")
-                    ts_part = clean_ts.split()[-1]
-                    
-                    ts = datetime.strptime(ts_part, "%H:%M:%S")
-                    delta = ts - start_time
-                    hours, remainder = divmod(delta.seconds, 3600)
-                    minutes, seconds = divmod(remainder, 60)
-                    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-                except Exception:
+        # UPDATED: Hard start time set to 7:15 AM Eastern
+        start_time = datetime.strptime("07:15:00", "%H:%M:%S")
+        
+        stats = reads.groupby('Bib').agg(
+            Loop_Count=('Timestamp', 'count'),
+            Last_Read=('Timestamp', 'max')
+        ).reset_index()
+        
+        df = pd.merge(roster, stats, on='Bib', how='inner')
+        df['Mileage'] = df['Loop_Count'] * 4
+        
+        def calc_elapsed(ts_str):
+            try:
+                clean_ts = str(ts_str).strip("'\" ")
+                ts_part = clean_ts.split()[-1]
+                
+                ts = datetime.strptime(ts_part, "%H:%M:%S")
+                
+                # Handling safe math if a read accidentally happened before 7:15 kickoff
+                if ts < start_time:
                     return "00:00:00"
                     
-            df['Overall Time'] = df['Last_Read'].apply(calc_elapsed)
-            df = df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
-            
-            # 3. AUTO-SAVE BACKUP AT 10:00 AM SATURDAY
-            if is_past_lock_time() and not os.path.exists(LOCAL_BACKUP_FILE):
-                df.to_csv(LOCAL_BACKUP_FILE, index=False)
-            
-            return df
-
-        except Exception as e:
-            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
-                time.sleep(1)
-                continue
-            else:
-                st.error(f"Error processing live data: {e}")
-                return pd.DataFrame()
+                delta = ts - start_time
+                hours, remainder = divmod(delta.seconds, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            except Exception:
+                return "00:00:00"
                 
-    return pd.DataFrame()
+        df['Overall Time'] = df['Last_Read'].apply(calc_elapsed)
+        df = df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
+        
+        return df
+
+    except Exception as e:
+        st.error(f"Critical execution error tracking data: {e}")
+        return pd.DataFrame()
 
 # 3. Pull Data
-master_data = get_processed_data()
+master_data = get_frozen_test_data()
 
 # 4. UI Title Layout
-if is_past_lock_time():
-    st.markdown("<h1>🔒 RFID TEST LEADERBOARD - FINAL RESULTS (LOCKED)</h1>", unsafe_allow_html=True)
-else:
-    st.markdown("<h1>🏃‍♂️ RFID TEST LEADERBOARD - OVERALL (LIVE)</h1>", unsafe_allow_html=True)
+st.markdown("<h1>🔒 RFID TEST LEADERBOARD - FINAL RESULTS (LOCKED)</h1>", unsafe_allow_html=True)
 
 # 5. Transparent Table Engine (With 15-Line Limit Slicing)
 if master_data.empty:
-    st.info("Awaiting initial RFID reads...")
+    st.info("No valid test entries found between 07:15:00 and 10:00:00.")
 else:
     master_data['Rank'] = range(1, len(master_data) + 1)
     cols_to_show = ['Rank', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time', 'distance']
@@ -198,7 +176,4 @@ else:
     limited_display_df = display_df.head(15)
     st.table(limited_display_df, hide_index=True)
     
-    if is_past_lock_time():
-        st.caption(f"Results are locked. Displaying frozen final standings of {len(display_df)} entries tracked at 10:00 AM Eastern.")
-    else:
-        st.caption(f"Displaying top {len(limited_display_df)} runners out of {len(display_df)} total test entries tracked.")
+    st.caption(f"Results are permanently locked. Displaying frozen final standings of {len(display_df)} entries tracked between 7:15 AM and 10:00 AM Eastern.")
