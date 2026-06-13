@@ -2,6 +2,8 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
+import base64
+import os  # <-- RESTORED: This fixes the NameError from the screenshot!
 
 # 1. Page Configuration
 st.set_page_config(page_title="RFID TEST LEADERBOARD", layout="wide")
@@ -82,7 +84,7 @@ st.markdown(
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Using cache_resource ensures this function executes EXACTLY ONCE when the app starts, 
-# freezing the data frame in memory forever until you modify the code or manually reboot the app server.
+# freezing the dataframe in memory forever until you modify the code or manually reboot the app server.
 @st.cache_resource
 def get_frozen_test_data():
     try:
