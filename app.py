@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 import base64
 import os
+import pytz  # Added to strictly lock to Eastern Time regardless of server location
 
 # 1. Page Configuration
 st.set_page_config(page_title="RFID TEST LEADERBOARD", layout="wide")
@@ -86,21 +87,25 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 LOCAL_BACKUP_FILE = "final_leaderboard.csv"
 
 def is_past_lock_time():
-    """Checks if the current system time is past 10:00 AM on Saturday."""
-    now = datetime.now()
-    # Lock target: 10:00:00 AM
-    lock_time = now.replace(hour=10, minute=0, second=0, microsecond=0)
-    return now >= lock_time
+    """Checks if the current Eastern Time is past 10:00 AM on Saturday, June 13, 2026."""
+    # Force timezone calculation to US/Eastern time zone
+    eastern = pytz.timezone('US/Eastern')
+    now_eastern = datetime.now(eastern)
+    
+    # HARD TARGET: Saturday, June 13, 2026 @ 10:00:00 AM Eastern Time
+    lock_target = datetime(2026, 6, 13, 10, 0, 0, tzinfo=eastern)
+    
+    return now_eastern >= lock_target
 
 def get_processed_data():
-    # 1. FAILSAFE CHECK: If it is past 10 AM and our permanent local backup exists, read that instantly
+    # 1. FAILSAFE CHECK: If it is past Saturday 10 AM and our permanent local backup exists, read that instantly
     if is_past_lock_time() and os.path.exists(LOCAL_BACKUP_FILE):
         try:
             return pd.read_csv(LOCAL_BACKUP_FILE)
         except Exception:
             pass # Fallback to live pull if local file reading fails inexplicably
 
-    # 2. LIVE FETCH PATTERNS (Before 10:00 AM)
+    # 2. LIVE FETCH PATTERNS (Active until Saturday 10:00 AM)
     for attempt in range(3):
         try:
             # Load Roster
@@ -159,7 +164,7 @@ def get_processed_data():
             # Sort everything globally by performance criteria
             df = df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
             
-            # 3. AUTO-SAVE BACKUP AT 10:00 AM: If we hit 10 AM, write this final dataset to local disk immediately
+            # 3. AUTO-SAVE BACKUP AT 10:00 AM SATURDAY: Write this final dataset to local disk immediately
             if is_past_lock_time() and not os.path.exists(LOCAL_BACKUP_FILE):
                 df.to_csv(LOCAL_BACKUP_FILE, index=False)
             
@@ -194,11 +199,9 @@ else:
     # Isolate only required columns for displaying
     cols_to_show = ['Rank', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time', 'distance']
     
-    # Check if 'distance' column needs renaming (it's called 'distance' when live, or preserved in CSV raw schema)
     if 'distance' in master_data.columns:
         display_df = master_data[cols_to_show].rename(columns={'Loop_Count': 'Loops', 'distance': 'Division'})
     else:
-        # Compatibility handling if reading a post-processed data frame structure
         cols_to_show_backup = ['Rank', 'Bib', 'Name', 'Loops', 'Mileage', 'Overall Time', 'Division']
         display_df = master_data[cols_to_show_backup]
     
@@ -210,6 +213,6 @@ else:
     
     # Summary notification lines showing status context
     if is_past_lock_time():
-        st.caption(f"Results are locked. Displaying frozen final standings of {len(display_df)} entries tracked at 10:00 AM.")
+        st.caption(f"Results are locked. Displaying frozen final standings of {len(display_df)} entries tracked at 10:00 AM Eastern.")
     else:
         st.caption(f"Displaying top {len(limited_display_df)} runners out of {len(display_df)} total test entries tracked.")
