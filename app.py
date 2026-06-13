@@ -2,10 +2,9 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import base64
 import os
-import pytz  # Added to strictly lock to Eastern Time regardless of server location
 
 # 1. Page Configuration
 st.set_page_config(page_title="RFID TEST LEADERBOARD", layout="wide")
@@ -88,36 +87,33 @@ LOCAL_BACKUP_FILE = "final_leaderboard.csv"
 
 def is_past_lock_time():
     """Checks if the current Eastern Time is past 10:00 AM on Saturday, June 13, 2026."""
-    # Force timezone calculation to US/Eastern time zone
-    eastern = pytz.timezone('US/Eastern')
-    now_eastern = datetime.now(eastern)
+    # Create a reliable UTC-4 offset for Eastern Daylight Time (EDT) natively
+    edt_tz = timezone(timedelta(hours=-4))
+    now_eastern = datetime.now(timezone.utc).astimezone(edt_tz)
     
-    # HARD TARGET: Saturday, June 13, 2026 @ 10:00:00 AM Eastern Time
-    lock_target = datetime(2026, 6, 13, 10, 0, 0, tzinfo=eastern)
+    # HARD TARGET: Saturday, June 13, 2026 @ 10:00:00 AM EDT
+    lock_target = datetime(2026, 6, 13, 10, 0, 0, tzinfo=edt_tz)
     
     return now_eastern >= lock_target
 
 def get_processed_data():
-    # 1. FAILSAFE CHECK: If it is past Saturday 10 AM and our permanent local backup exists, read that instantly
+    # 1. FAILSAFE CHECK: Read local frozen data frame if past lock time
     if is_past_lock_time() and os.path.exists(LOCAL_BACKUP_FILE):
         try:
             return pd.read_csv(LOCAL_BACKUP_FILE)
         except Exception:
-            pass # Fallback to live pull if local file reading fails inexplicably
+            pass
 
-    # 2. LIVE FETCH PATTERNS (Active until Saturday 10:00 AM)
+    # 2. LIVE FETCH PATTERNS
     for attempt in range(3):
         try:
-            # Load Roster
             roster = conn.read(worksheet="Runner Data", ttl="10s")
             roster.columns = roster.columns.str.strip()
             
             roster['Bib'] = pd.to_numeric(roster['Bib'], errors='coerce').fillna(0).astype(int)
             roster['Name'] = roster['First Name'].astype(str) + " " + roster['Last Name'].astype(str)
             
-            # Load Data Input Sheet
             reads = conn.read(worksheet="Data Input", ttl="10s")
-            
             if reads.empty:
                 return pd.DataFrame()
             
@@ -160,11 +156,9 @@ def get_processed_data():
                     return "00:00:00"
                     
             df['Overall Time'] = df['Last_Read'].apply(calc_elapsed)
-            
-            # Sort everything globally by performance criteria
             df = df.sort_values(by=['Loop_Count', 'Last_Read'], ascending=[False, True]).reset_index(drop=True)
             
-            # 3. AUTO-SAVE BACKUP AT 10:00 AM SATURDAY: Write this final dataset to local disk immediately
+            # 3. AUTO-SAVE BACKUP AT 10:00 AM SATURDAY
             if is_past_lock_time() and not os.path.exists(LOCAL_BACKUP_FILE):
                 df.to_csv(LOCAL_BACKUP_FILE, index=False)
             
@@ -193,10 +187,7 @@ else:
 if master_data.empty:
     st.info("Awaiting initial RFID reads...")
 else:
-    # Append overall sequential placing based on the entire field
     master_data['Rank'] = range(1, len(master_data) + 1)
-    
-    # Isolate only required columns for displaying
     cols_to_show = ['Rank', 'Bib', 'Name', 'Loop_Count', 'Mileage', 'Overall Time', 'distance']
     
     if 'distance' in master_data.columns:
@@ -205,13 +196,9 @@ else:
         cols_to_show_backup = ['Rank', 'Bib', 'Name', 'Loops', 'Mileage', 'Overall Time', 'Division']
         display_df = master_data[cols_to_show_backup]
     
-    # Cap the view strictly to the top 15 rows
     limited_display_df = display_df.head(15)
-    
-    # Render using st.table for complete background logo transparency
     st.table(limited_display_df, hide_index=True)
     
-    # Summary notification lines showing status context
     if is_past_lock_time():
         st.caption(f"Results are locked. Displaying frozen final standings of {len(display_df)} entries tracked at 10:00 AM Eastern.")
     else:
